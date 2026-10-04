@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Products — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">Products</h1>
+        <a href="/products/new" class="btn btn-amber btn-sm font-semibold">+ Add Product</a>
+    </div>
+
+    {% if products %}
+
+    <!-- Desktop: table -->
+    <div class="hidden lg:block card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table">
+                <thead>
+                    <tr class="text-amber-900">
+                        <th>SKU</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Size</th>
+                        <th class="text-right">Price</th>
+                        <th class="text-right">Unit cost</th>
+                        <th class="text-right">Margin</th>
+                        <th class="text-center">Can make</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    {% set cap = capacities.get(product.id) %}
+                    {% set eco = economics.get(product.id) %}
+                    <tr class="hover {% if not product.is_active %}opacity-50{% endif %}">
+                        <td class="font-mono text-xs">{{ product.sku }}</td>
+                        <td class="font-semibold">{{ product.name }}</td>
+                        <td><span class="badge badge-outline badge-sm">{{ product.category }}</span></td>
+                        <td class="text-sm">
+                            {{ product.measure_display or '' }}{% if product.measure_display and product.pack_display %} · {% endif %}{{ product.pack_display or '' }}{% if not product.measure_display and not product.pack_display %}—{% endif %}
+                        </td>
+                        <td class="text-right font-medium">{{ product.base_price|money }}</td>
+                        <td class="text-right text-sm">
+                            {% if eco and eco.has_recipe %}
+                                {{ eco.unit_cost|money }}
+                            {% else %}
+                                <a href="/products/{{ product.id }}/recipe"
+                                   class="text-xs text-base-content/40 hover:underline whitespace-nowrap">
+                                    set recipe
+                                </a>
+                            {% endif %}
+                        </td>
+                        <td class="text-right text-sm">
+                            {% if eco and eco.has_recipe %}
+                                <div class="font-semibold {% if eco.unit_margin > 0 %}text-success{% else %}text-error{% endif %}">
+                                    {{ eco.unit_margin|money }}
+                                </div>
+                                <div class="text-xs text-base-content/50">
+                                    {{ "%.1f"|format(eco.margin_pct) }}%
+                                </div>
+                            {% else %}
+                                <span class="text-base-content/30">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if cap and cap.has_recipe %}
+                                {% if cap.capacity == 0 %}
+                                    <span class="badge badge-error badge-sm">{{ cap.capacity }}</span>
+                                {% elif cap.capacity <= 5 %}
+                                    <span class="badge badge-warning badge-sm">{{ cap.capacity }}</span>
+                                {% else %}
+                                    <span class="badge badge-success badge-sm">{{ cap.capacity }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-base-content/30">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if product.is_active %}
+                                <span class="badge badge-success badge-sm">Active</span>
+                            {% else %}
+                                <span class="badge badge-ghost badge-sm">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="flex gap-1 justify-end">
+                                <a href="/products/{{ product.id }}/recipe" class="btn btn-outline btn-xs">Recipe</a>
+                                <a href="/products/{{ product.id }}/edit" class="btn btn-outline btn-xs">Edit</a>
+                                {% if product.is_active %}
+                                <button type="button" class="btn btn-outline btn-xs btn-error"
+                                        data-product-id="{{ product.id }}"
+                                        data-product-name="{{ product.name }}"
+                                        onclick="softDeleteProduct(this)">
+                                    Delete
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Mobile / narrow: cards -->
+    <div class="lg:hidden space-y-3">
+        {% for product in products %}
+        {% set cap = capacities.get(product.id) %}
+        {% set eco = economics.get(product.id) %}
+        <div class="card bg-base-100 shadow-sm {% if not product.is_active %}opacity-60{% endif %}">
+            <div class="card-body p-4 space-y-2">
+                <div class="flex justify-between items-start">
+                    <div class="min-w-0">
+                        <h3 class="font-bold text-lg truncate">{{ product.name }}</h3>
+                        <p class="text-xs text-base-content/60 font-mono truncate">{{ product.sku }}</p>
+                    </div>
+                    {% if product.is_active %}
+                        <span class="badge badge-success badge-sm shrink-0">Active</span>
+                    {% else %}
+                        <span class="badge badge-ghost badge-sm shrink-0">Inactive</span>
+                    {% endif %}
+                </div>
+
+                <div class="flex flex-wrap gap-1">
+                    <span class="badge badge-outline badge-sm">{{ product.category }}</span>
+                    {% if product.measure_display %}<span class="badge badge-ghost badge-sm">{{ product.measure_display }}</span>{% endif %}
+                    {% if product.pack_display %}<span class="badge badge-ghost badge-sm">{{ product.pack_display }}</span>{% endif %}
+                    {% if cap and cap.has_recipe %}
+                        {% if cap.capacity == 0 %}
+                            <span class="badge badge-error badge-sm">Can make 0</span>
+                        {% elif cap.capacity <= 5 %}
+                            <span class="badge badge-warning badge-sm">Can make {{ cap.capacity }}</span>
+                        {% else %}
+                            <span class="badge badge-success badge-sm">Can make {{ cap.capacity }}</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-base-content/60">Price</span>
+                        <span class="font-semibold">{{ product.base_price|money }}</span>
+                    </div>
+                    {% if eco and eco.has_recipe %}
+                    <div class="flex justify-between">
+                        <span class="text-base-content/60">Unit cost</span>
+                        <span>{{ eco.unit_cost|money }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/60">Margin</span>
+                        <span class="font-semibold {% if eco.unit_margin > 0 %}text-success{% else %}text-error{% endif %}">
+                            {{ eco.unit_margin|money }}
+                            <span class="text-xs text-base-content/50">({{ "%.1f"|format(eco.margin_pct) }}%)</span>
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="flex gap-1 flex-wrap justify-end pt-2 border-t border-base-200">
+                    <a href="/products/{{ product.id }}/recipe" class="btn btn-outline btn-xs">Recipe</a>
+                    <a href="/products/{{ product.id }}/edit" class="btn btn-outline btn-xs">Edit</a>
+                    {% if product.is_active %}
+                    <button type="button" class="btn btn-outline btn-xs btn-error"
+                            data-product-id="{{ product.id }}"
+                            data-product-name="{{ product.name }}"
+                            onclick="softDeleteProduct(this)">
+                        Delete
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <p class="text-5xl mb-4">🎂</p>
+            <h2 class="text-xl font-bold">No products yet</h2>
+            <p class="text-base-content/60 mt-1">Add your first product to get started.</p>
+            <a href="/products/new" class="btn btn-amber mt-4">+ Add Product</a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function softDeleteProduct(btn) {
+    const id = btn.dataset.productId;
+    const name = btn.dataset.productName;
+    if (!confirm(`Deactivate "${name}"? It will be hidden from new orders but kept for history.`)) return;
+    const r = await fetch(`/products/${id}/delete`, { method: 'POST' });
+    if (r.ok) {
+        toast('Product deactivated', 'success');
+        setTimeout(() => location.reload(), 500);
+    } else {
+        toast('Failed to deactivate', 'error');
+    }
+}
+</script>
+{% endblock %}

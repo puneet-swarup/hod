@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Databases
+*.sqlite3
+*.db
+db.sqlite3
+db.sqlite3-journal
+
+# Django
+/media/
+/staticfiles/
+*.log
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data
+backups/
+reports/
+export/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/invoices/
+data/receipt_preview.bin
+data/test_ui.db
+data/test_ui.db-wal
+data/test_ui.db-shm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Binaries / build tools
+*.exe
+*.dll
+*.so
+*.dylib
+tailwindcss
+tailwindcss.exe
+daisyui.mjs
+daisyui.css
+tailwind.js
+
+# Editor / tooling patch backups
+*.orig
+*.rej
+
+# Alembic
+alembic/__pycache__/
+
+# Old backups
+tests.backup/
+
+# Agent / local planning (not part of the app)
+context.md
+.forge-permissions.json

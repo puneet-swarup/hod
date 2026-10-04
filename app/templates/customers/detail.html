@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}{{ customer.name }} — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-center flex-wrap gap-2">
+        <h1 class="text-2xl font-extrabold text-amber-900">{{ customer.name }}</h1>
+        <div class="flex gap-2 flex-wrap">
+            <a href="/orders/new?from_order_id=0" class="hidden">.</a>
+            <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline btn-sm">Edit</a>
+            <button type="button" class="btn btn-outline btn-sm btn-error"
+                    onclick="softDelete({{ customer.id }})">
+                Delete
+            </button>
+            <a href="/customers" class="btn btn-ghost btn-sm">← All</a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-xs text-base-content/60 uppercase">Lifetime value</p>
+                <p class="text-xl font-bold">{{ stats.lifetime_value|money }}</p>
+                {% if stats.first_order_date %}
+                <p class="text-xs text-base-content/50">since {{ stats.first_order_date|d }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-xs text-base-content/60 uppercase">Orders</p>
+                <p class="text-xl font-bold">{{ stats.order_count }}</p>
+                {% if stats.cancelled_count %}
+                <p class="text-xs text-base-content/50">{{ stats.cancelled_count }} cancelled</p>
+                {% elif stats.last_order_date %}
+                <p class="text-xs text-base-content/50">last {{ stats.last_order_date|d }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-xs text-base-content/60 uppercase">Outstanding</p>
+                <p class="text-xl font-bold {% if stats.outstanding > 0 %}text-error{% else %}text-success{% endif %}">
+                    {{ stats.outstanding|money }}
+                </p>
+                {% if stats.outstanding > 0 %}
+                <p class="text-xs text-base-content/50">collect pending</p>
+                {% else %}
+                <p class="text-xs text-base-content/50">all settled</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-xs text-base-content/60 uppercase">Avg order</p>
+                <p class="text-xl font-bold">{{ stats.average_order_value|money }}</p>
+                <p class="text-xs text-base-content/50">per order</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-4">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer Details</h2>
+
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Full Name</span></label>
+                <input type="text" value="{{ customer.name or '' }}" class="input input-bordered w-full" disabled />
+            </div>
+
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Phone</span></label>
+                <input type="text" value="{{ customer.phone or '' }}" class="input input-bordered w-full font-mono" disabled />
+            </div>
+
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Email</span></label>
+                <input type="text" value="{{ customer.email or '' }}" class="input input-bordered w-full" disabled
+                       placeholder="Not provided" />
+            </div>
+
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Notes / Preferences</span></label>
+                {% if customer.notes %}
+                    <div class="p-3 rounded-lg bg-base-200 border border-base-300 text-sm whitespace-pre-line">{{ customer.notes }}</div>
+                {% else %}
+                    <div class="p-3 rounded-lg bg-base-200 border border-base-300 text-sm text-base-content/40">No notes</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-4">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Addresses</h2>
+
+            {% set active_addrs = customer.addresses | selectattr('is_active') | list %}
+            {% if active_addrs %}
+            <div class="space-y-3">
+                {% for addr in active_addrs %}
+                <div class="p-3 rounded-lg bg-base-200 border border-base-300">
+                    <div class="flex gap-2 items-start">
+                        <div class="input input-bordered input-sm w-24 shrink-0 font-semibold flex items-center">
+                            {{ addr.label or 'Home' }}
+                        </div>
+                        <div class="textarea textarea-bordered textarea-sm flex-1 min-w-0 whitespace-pre-line"
+                             style="min-height: 2.5rem; padding-top: 0.4rem; resize: none;">
+                            {{ addr.line or '' }}
+                        </div>
+                        <div class="flex flex-col items-center shrink-0 w-14">
+                            {% if addr.is_default %}
+                                <span class="badge badge-success badge-sm">Default</span>
+                            {% else %}
+                                <span class="badge badge-ghost badge-sm">—</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-base-content/50">No addresses saved.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <div class="flex justify-between items-center">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Order History</h2>
+                <a href="/orders/new" class="btn btn-amber btn-xs font-semibold">+ New Order</a>
+            </div>
+
+            {% if customer.orders %}
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-amber-900">
+                            <th>Order #</th>
+                            <th>Placed</th>
+                            <th>Status</th>
+                            <th class="text-right">Amount</th>
+                            <th class="text-right">Balance</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in customer.orders|sort(attribute='order_date', reverse=true) %}
+                        <tr>
+                            <td>
+                                <a href="/orders/{{ order.id }}" class="font-mono text-sm hover:underline">
+                                    {{ order.order_number }}
+                                </a>
+                            </td>
+                            <td class="text-sm">{{ order.order_date|d }}</td>
+                            <td>
+                                <span class="badge {{ order.status_badge_class }} badge-sm">
+                                    {{ order.status.value.replace('_', ' ') }}
+                                </span>
+                            </td>
+                            <td class="text-right">{{ order.total_amount|money }}</td>
+                            <td class="text-right">
+                                {% if order.balance_due > 0 %}
+                                    <span class="text-error font-semibold">{{ order.balance_due|money }}</span>
+                                {% else %}
+                                    <span class="text-success">Paid</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if order.status.value != 'CANCELLED' %}
+                                <a href="/orders/new?from_order_id={{ order.id }}"
+                                   class="btn btn-outline btn-xs whitespace-nowrap"
+                                   title="Start a new order with the same items">
+                                    Repeat
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-base-content/50 text-center py-4">No orders yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function softDelete(customerId) {
+    if (!confirm('Delete this customer? Their addresses will also be removed. This cannot be undone from the UI.')) return;
+    const r = await fetch(`/customers/${customerId}/delete`, { method: 'POST' });
+    if (r.ok) {
+        location.href = '/customers';
+    } else {
+        toast('Failed to delete', 'error');
+    }
+}
+</script>
+{% endblock %}

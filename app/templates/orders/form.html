@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% set is_edit = (mode == 'edit') %}
+{% block title %}{{ "Edit " ~ order.order_number if is_edit else "New Order" }} — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto max-w-3xl space-y-4">
+
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-extrabold text-amber-900">
+            {{ "Edit " ~ order.order_number if is_edit else "New Order" }}
+        </h1>
+        <a href="{{ '/orders/' ~ order.id if is_edit else '/orders' }}" class="btn btn-ghost btn-sm">← Back</a>
+    </div>
+
+    {% if not is_edit and source_order_number %}
+    <div class="alert alert-info">
+        <span>Repeating items from <strong>{{ source_order_number }}</strong>. Adjust anything, then save.</span>
+    </div>
+    {% endif %}
+
+    {% if is_edit and has_invoice %}
+    <div class="alert alert-warning text-sm">
+        <span>An invoice has already been issued for this order. Edits here will <strong>not</strong> change that invoice.</span>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-error"><span>{{ error }}</span></div>
+    {% endif %}
+
+    <form method="post" action="{{ form_action }}" id="order-form" class="space-y-4">
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-3">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer</h2>
+
+                {% if is_edit %}
+                    <div class="p-3 rounded-lg bg-base-200 border border-base-300">
+                        <p class="font-semibold">{{ order.customer.name }}</p>
+                        <p class="text-sm text-base-content/60">{{ order.customer.phone }}</p>
+                        <p class="text-xs text-base-content/50 mt-1">
+                            Customer cannot be changed. Cancel and recreate if needed.
+                        </p>
+                    </div>
+                {% else %}
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <select name="customer_id" id="customer_id" class="select select-bordered w-full sm:flex-1 sm:min-w-0" required>
+                            <option value="">Select a customer…</option>
+                            {% for c in customers %}
+                            {% set selected_id = (form_data.customer_id if form_data and form_data.customer_id else preset_customer_id) %}
+                            <option value="{{ c.id }}"
+                                    data-default-address="{{ c.default_address_line }}"
+                                    data-delivery-type="{{ 'DELIVERY' if c.default_address_line else 'PICKUP' }}"
+                                    {% if selected_id and c.id == selected_id %}selected{% endif %}>
+                                {{ c.name }} — {{ c.phone }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-outline whitespace-nowrap shrink-0"
+                                onclick="openQuickAdd()">
+                            + New Customer
+                        </button>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-3">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Fulfillment</h2>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Type</span></label>
+                        {% set cur_type = order.delivery_type if is_edit else (form_data.delivery_type if form_data else 'DELIVERY') %}
+                        <select name="delivery_type" id="delivery_type" class="select select-bordered w-full">
+                            <option value="DELIVERY" {% if cur_type == 'DELIVERY' %}selected{% endif %}>Delivery</option>
+                            <option value="PICKUP" {% if cur_type == 'PICKUP' %}selected{% endif %}>Pickup</option>
+                        </select>
+                    </div>
+
+                    {% if not is_edit %}
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Order placed on</span></label>
+                        <input type="date" name="order_date" class="input input-bordered w-full"
+                               value="{{ form_data.order_date if form_data and form_data.order_date else today_date }}" />
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Ready by / Fulfillment time</span></label>
+                    {% set cur_fulfillment = (order.fulfillment_date.strftime('%Y-%m-%dT%H:%M') if order.fulfillment_date else '') if is_edit else (form_data.fulfillment_date if form_data and form_data.fulfillment_date else default_fulfillment) %}
+                    <input type="datetime-local" name="fulfillment_date" id="fulfillment_date"
+                           class="input input-bordered w-full"
+                           value="{{ cur_fulfillment }}"
+                           required />
+                    <label class="label">
+                        <span class="label-text-alt text-xs text-base-content/60">
+                            When the customer picks up or receives. Orders are sorted by this.
+                        </span>
+                    </label>
+                </div>
+
+                <div class="form-control" id="delivery_address_wrap">
+                    <label class="label"><span class="label-text font-semibold">Delivery address</span></label>
+                    {% set cur_addr = (order.delivery_address or '') if is_edit else (form_data.delivery_address if form_data and form_data.delivery_address else '') %}
+                    <textarea name="delivery_address" id="delivery_address"
+                              class="textarea textarea-bordered w-full" rows="3"
+                              placeholder="Auto-filled from customer's default address">{{ cur_addr }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-3">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Items</h2>
+
+                <div id="items" class="space-y-2">
+                    {% if is_edit %}
+                        {% for item in order.items %}
+                        <div class="item-row grid grid-cols-12 gap-2 items-end">
+                            <div class="col-span-7 form-control">
+                                <label class="label"><span class="label-text font-semibold">Product</span></label>
+                                <select name="product_id" class="select select-bordered select-sm w-full" required>
+                                    <option value="">Select…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}" {% if p.id == item.product_id %}selected{% endif %}>
+                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-span-3 form-control">
+                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
+                                <input type="number" min="1" value="{{ item.quantity }}" name="quantity"
+                                       class="input input-bordered input-sm w-full" required />
+                            </div>
+                            <div class="col-span-2">
+                                <button type="button" class="btn btn-ghost btn-sm w-full"
+                                        onclick="this.closest('.item-row').remove()">Remove</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% elif preset_items %}
+                        {% for item in preset_items %}
+                        <div class="item-row grid grid-cols-12 gap-2 items-end">
+                            <div class="col-span-7 form-control">
+                                <label class="label"><span class="label-text font-semibold">Product</span></label>
+                                <select name="product_id" class="select select-bordered select-sm w-full" required>
+                                    <option value="">Select…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}" {% if p.id == item.product_id %}selected{% endif %}>
+                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-span-3 form-control">
+                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
+                                <input type="number" min="1" value="{{ item.quantity }}" name="quantity"
+                                       class="input input-bordered input-sm w-full" required />
+                            </div>
+                            <div class="col-span-2">
+                                <button type="button" class="btn btn-ghost btn-sm w-full"
+                                        onclick="this.closest('.item-row').remove()">Remove</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="item-row grid grid-cols-12 gap-2 items-end">
+                            <div class="col-span-7 form-control">
+                                <label class="label"><span class="label-text font-semibold">Product</span></label>
+                                <select name="product_id" class="select select-bordered select-sm w-full" required>
+                                    <option value="">Select…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}">
+                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-span-3 form-control">
+                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
+                                <input type="number" min="1" value="1" name="quantity"
+                                       class="input input-bordered input-sm w-full" required />
+                            </div>
+                            <div class="col-span-2">
+                                <button type="button" class="btn btn-ghost btn-sm w-full"
+                                        onclick="this.closest('.item-row').remove()">Remove</button>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline" onclick="addItemRow()">+ Add item</button>
+                </div>
+            </div>
+        </div>
+
+        {% if not is_edit %}
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-3">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Advance</h2>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Advance amount</span></label>
+                        <input type="number" step="0.01" min="0" value="0" name="advance_paid"
+                               class="input input-bordered w-full" />
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Payment method</span></label>
+                        <select name="advance_method" class="select select-bordered w-full">
+                            <option value="CASH">Cash</option>
+                            <option value="UPI">UPI</option>
+                            <option value="BANK">Bank</option>
+                            <option value="CARD">Card</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-3">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Notes</h2>
+                <textarea name="notes" rows="3" class="textarea textarea-bordered w-full">{{ (order.notes if is_edit and order.notes else (form_data.notes if form_data and form_data.notes else '')) or '' }}</textarea>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-2">
+            <a href="{{ '/orders/' ~ order.id if is_edit else '/orders' }}" class="btn btn-ghost">Cancel</a>
+            <button class="btn btn-primary" type="submit">
+                {{ "Save Changes" if is_edit else "Create Order" }}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block modals %}
+{% if not is_edit %}
+<dialog id="quick-customer-modal"
+        class="modal modal-bottom sm:modal-middle"
+        onclick="if (event.target === this) closeQuickAdd()">
+    <div class="modal-box max-w-md p-0">
+        <div class="bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4 border-b border-amber-200 rounded-t-2xl">
+            <h3 class="font-extrabold text-lg text-amber-900">Quick add customer</h3>
+            <p class="text-xs text-amber-700/70 mt-0.5">Create a customer without leaving this order.</p>
+        </div>
+
+        <form id="quick-customer-form" class="p-6 space-y-3">
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Name *</span></label>
+                <input type="text" name="name" required class="input input-bordered w-full" placeholder="e.g., Priya Sharma" />
+            </div>
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Phone *</span></label>
+                <input type="tel" name="phone" required class="input input-bordered w-full font-mono" placeholder="+91 98765 43210" />
+            </div>
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Email (optional)</span></label>
+                <input type="email" name="email" class="input input-bordered w-full" placeholder="priya@example.com" />
+            </div>
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Address (optional)</span></label>
+                <div class="flex gap-2 items-start">
+                    <input type="text" name="address_label" value="Home"
+                           class="input input-bordered w-24 shrink-0"
+                           placeholder="Label" />
+                    <textarea name="address_line" rows="2"
+                              class="textarea textarea-bordered flex-1 min-w-0"
+                              placeholder="Full address"></textarea>
+                </div>
+            </div>
+        </form>
+
+        <div class="flex justify-end gap-2 px-6 pb-6">
+            <button type="button" class="btn btn-ghost" onclick="closeQuickAdd()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="submitQuickAdd()">Add & select</button>
+        </div>
+    </div>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addItemRow() {
+    const container = document.getElementById('items');
+    const template = container.querySelector('.item-row');
+    const clone = template.cloneNode(true);
+    clone.querySelector('select[name="product_id"]').value = '';
+    clone.querySelector('input[name="quantity"]').value = 1;
+    container.appendChild(clone);
+}
+
+{% if not is_edit %}
+(function () {
+    const customerSelect = document.getElementById('customer_id');
+    const deliveryType = document.getElementById('delivery_type');
+    const addressField = document.getElementById('delivery_address');
+    const addressWrap = document.getElementById('delivery_address_wrap');
+
+    function selectedCustomer() {
+        const opt = customerSelect.selectedOptions[0];
+        if (!opt || !opt.value) return null;
+        return {
+            defaultAddress: opt.dataset.defaultAddress || '',
+            suggestedType: opt.dataset.deliveryType || 'DELIVERY',
+        };
+    }
+
+    function syncAddressFromCustomer({ onlyIfDelivery = true } = {}) {
+        const c = selectedCustomer();
+        if (!c) return;
+        if (onlyIfDelivery && deliveryType.value !== 'DELIVERY') return;
+        if (!c.defaultAddress) return;
+        const untouched = !addressField.dataset.autofilled || addressField.value === addressField.dataset.autofilled;
+        if (untouched) {
+            addressField.value = c.defaultAddress;
+            addressField.dataset.autofilled = c.defaultAddress;
+        }
+    }
+
+    function syncAddressVisibility() {
+        addressWrap.style.display = (deliveryType.value === 'DELIVERY') ? '' : 'none';
+    }
+
+    customerSelect.addEventListener('change', () => {
+        const c = selectedCustomer();
+        if (c) deliveryType.value = c.suggestedType;
+        syncAddressVisibility();
+        syncAddressFromCustomer({ onlyIfDelivery: false });
+    });
+
+    deliveryType.addEventListener('change', () => {
+        syncAddressVisibility();
+        if (deliveryType.value === 'DELIVERY') syncAddressFromCustomer();
+    });
+
+    syncAddressVisibility();
+    syncAddressFromCustomer({ onlyIfDelivery: false });
+})();
+
+function openQuickAdd() {
+    const dlg = document.getElementById('quick-customer-modal');
+    document.getElementById('quick-customer-form').reset();
+    const label = document.querySelector('#quick-customer-form input[name="address_label"]');
+    if (label) label.value = 'Home';
+    dlg.showModal();
+}
+function closeQuickAdd() {
+    document.getElementById('quick-customer-modal').close();
+}
+async function submitQuickAdd() {
+    const form = document.getElementById('quick-customer-form');
+    if (!form.reportValidity()) return;
+
+    const fd = new FormData(form);
+    try {
+        const r = await fetch('/customers/quick', { method: 'POST', body: fd });
+        const data = await r.json();
+        if (!data.ok) {
+            toast(data.error || 'Could not add customer', 'error');
+            return;
+        }
+        const sel = document.getElementById('customer_id');
+        const opt = document.createElement('option');
+        opt.value = data.customer.id;
+        opt.textContent = `${data.customer.name} — ${data.customer.phone}`;
+        opt.dataset.defaultAddress = data.customer.default_address || '';
+        opt.dataset.deliveryType = data.customer.default_address ? 'DELIVERY' : 'PICKUP';
+        sel.appendChild(opt);
+        sel.value = data.customer.id;
+        sel.dispatchEvent(new Event('change'));
+        closeQuickAdd();
+        toast(`Added ${data.customer.name}`, 'success');
+    } catch (e) {
+        toast('Network error', 'error');
+    }
+}
+{% else %}
+(function () {
+    const deliveryType = document.getElementById('delivery_type');
+    const addressWrap = document.getElementById('delivery_address_wrap');
+    function sync() {
+        addressWrap.style.display = (deliveryType.value === 'DELIVERY') ? '' : 'none';
+    }
+    deliveryType.addEventListener('change', sync);
+    sync();
+})();
+{% endif %}
+</script>
+{% endblock %}

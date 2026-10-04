@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ settings.app_name }}{% endblock %}</title>
+    <link rel="icon" type="image/png" href="/static/images/logo.png" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/static/manifest.json" />
+    <meta name="theme-color" content="#d97706" />
+    <link rel="apple-touch-icon" href="/static/images/logo.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="HOD" />
+
+    <link href="/static/css/app.css" rel="stylesheet" type="text/css" />
+    <script src="/static/js/htmx.min.js"></script>
+    <style>
+        /* Nav dropdown — self-contained, no Tailwind/daisyUI dependency */
+        .nav-more {
+            position: relative;
+            display: inline-block;
+        }
+        .nav-more > summary {
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+        }
+        .nav-more > summary::-webkit-details-marker { display: none; }
+        .nav-more > summary::marker { content: ""; }
+        .nav-more-menu {
+            position: absolute;
+            top: calc(100% + 0.4rem);
+            right: 0;
+            min-width: 11rem;
+            background: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+            padding: 0.35rem;
+            z-index: 100;
+            display: none;
+        }
+        .nav-more[open] .nav-more-menu {
+            display: block;
+        }
+        .nav-more-menu a {
+            display: block;
+            padding: 0.5rem 0.85rem;
+            border-radius: 0.35rem;
+            font-size: 0.875rem;
+            color: #1f2937;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background-color 0.15s ease;
+        }
+        .nav-more-menu a:hover {
+            background: #fef3c7;
+        }
+        .nav-more-menu a.active {
+            background: #fde68a;
+            color: #78350f;
+            font-weight: 600;
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body class="min-h-screen bg-base-200">
+
+    <!-- Top Navbar -->
+    <div class="navbar bg-gradient-to-r from-amber-50 to-orange-50 shadow-md sticky top-0 z-40 border-b border-amber-200">
+        <div class="container mx-auto px-2 sm:px-4 flex items-center">
+
+            <!-- Logo → /today -->
+            <a href="/today" class="flex items-center gap-2 mr-1 shrink-0">
+                <img src="/static/images/logo.png" alt="Logo"
+                     class="h-9 w-9 rounded-full shadow-sm object-cover" />
+                <div class="hidden lg:block">
+                    <span class="text-lg font-extrabold bg-gradient-to-r from-amber-700 to-orange-600
+                                 bg-clip-text text-transparent leading-tight block">
+                        {{ settings.app_name }}
+                    </span>
+                    <span class="text-[10px] text-amber-600 font-medium tracking-wide hidden md:block">
+                        {{ settings.app_tagline }}
+                    </span>
+                </div>
+            </a>
+
+            <!-- Nav -->
+            <nav class="flex items-center justify-center gap-0.5 flex-1 py-1">
+                <a href="/today"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/today' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    📅 <span class="hidden sm:inline">Today</span>
+                </a>
+                <a href="/orders"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/orders' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    📋 <span class="hidden sm:inline">Orders</span>
+                </a>
+                <a href="/customers"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/customers' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    👥 <span class="hidden sm:inline">Customers</span>
+                </a>
+                <a href="/products"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/products' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    🎂 <span class="hidden sm:inline">Products</span>
+                </a>
+
+                <details class="nav-more" id="nav-more">
+                    <summary class="btn btn-sm btn-ghost font-semibold whitespace-nowrap">
+                        ⋯ <span class="hidden sm:inline">More</span>
+                    </summary>
+                    <div class="nav-more-menu">
+                        <a href="/ingredients" class="{% if '/ingredients' in request.url.path %}active{% endif %}">📦 Inventory</a>
+                        <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}">📊 Reports</a>
+                        <a href="/dashboard" class="{% if '/dashboard' in request.url.path %}active{% endif %}">📈 Dashboard</a>
+                        <a href="/export" class="{% if '/export' in request.url.path %}active{% endif %}">📥 Export</a>
+                        <a href="/settings" class="{% if '/settings' in request.url.path %}active{% endif %}">⚙️ Settings</a>
+                        <!--
+                        <a href="/audit" class="{% if '/audit' in request.url.path %}active{% endif %}">📜 Audit</a>
+                        -->
+                    </div>
+                </details>
+            </nav>
+
+            <!-- Clock (desktop only) -->
+            <div class="flex-none hidden xl:flex items-center gap-2 ml-2">
+                <div class="flex flex-col items-end leading-tight">
+                    <span id="nav-date" class="text-xs font-semibold text-amber-800"></span>
+                    <span id="nav-time" class="text-xs text-amber-600 font-mono"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="p-4 md:p-6 max-w-7xl mx-auto">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Mobile FAB -->
+    <a href="/orders/new"
+       class="btn btn-circle btn-primary fixed bottom-6 right-6 z-30 shadow-lg md:hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+    </a>
+
+    <!-- Toast root -->
+    <div id="toast-root" class="toast toast-end toast-bottom z-[100]"></div>
+
+    <!-- Live clock + shared helpers -->
+    <script>
+    function updateClock() {
+        const now = new Date();
+        const d = document.getElementById('nav-date');
+        const t = document.getElementById('nav-time');
+        if (d) d.textContent = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        if (t) t.textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    function toast(msg, kind = 'info') {
+        const root = document.getElementById('toast-root');
+        if (!root) return;
+        const el = document.createElement('div');
+        const cls = kind === 'error' ? 'alert-error'
+                  : kind === 'success' ? 'alert-success'
+                  : 'alert-info';
+        el.className = `alert ${cls} shadow-lg`;
+        el.innerHTML = `<span>${msg}</span>`;
+        root.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+    }
+
+    // Global HTMX error handling
+    document.body.addEventListener('htmx:responseError', function (evt) {
+        let msg = 'Request failed';
+        try {
+            const detail = JSON.parse(evt.detail.xhr.responseText).detail;
+            if (detail) msg = detail;
+        } catch (e) { /* not JSON */ }
+        if (typeof toast === 'function') toast(msg, 'error');
+    });
+    document.body.addEventListener('htmx:sendError', function () {
+        if (typeof toast === 'function') toast('Network error', 'error');
+    });
+
+    // Register the service worker (required for Android install prompt).
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(() => {
+                // Silently ignore — desktop Chrome and dev environments don't need it.
+            });
+        });
+    }
+
+    // Close the More dropdown on click-outside or Escape.
+    // Uses pointerdown so the toggle click that opens the menu
+    // doesn't race with the close handler.
+    (function () {
+        const menu = document.getElementById('nav-more');
+        if (!menu) return;
+
+        document.addEventListener('pointerdown', function (e) {
+            if (!menu.open) return;
+            if (menu.contains(e.target)) return;
+            menu.removeAttribute('open');
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && menu.open) {
+                menu.removeAttribute('open');
+                const summary = menu.querySelector('summary');
+                if (summary) summary.focus();
+            }
+        });
+
+        // Close after picking an item (nav happens anyway, but this keeps
+        // the menu from lingering if a same-page anchor is clicked)
+        menu.querySelectorAll('.nav-more-menu a').forEach(function (a) {
+            a.addEventListener('click', function () {
+                menu.removeAttribute('open');
+            });
+        });
+    })();
+    </script>
+
+    {% block modals %}{% endblock %}
+    {% block scripts %}{% endblock %}
+</body>
+</html>

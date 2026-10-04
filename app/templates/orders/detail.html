@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.order_number }} — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-4">
+
+    <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">{{ order.order_number }}</h1>
+            <p class="text-sm text-base-content/60">Placed {{ order.order_date|dt }}</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+            {% if whatsapp_messages %}
+            <button type="button" class="btn btn-outline btn-sm" onclick="openWa()">
+                💬 Message Customer
+            </button>
+            {% endif %}
+            {% if order.status.value == 'CONFIRMED' %}
+            <a href="/orders/{{ order.id }}/edit" class="btn btn-outline btn-sm">Edit</a>
+            {% endif %}
+            <a href="/invoices/orders/{{ order.id }}/invoice" class="btn btn-outline btn-sm" target="_blank">Invoice</a>
+            <a href="/orders" class="btn btn-ghost btn-sm">Back</a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer</h2>
+                <p class="font-semibold text-lg">{{ order.customer.name }}</p>
+                <p class="text-sm">{{ order.customer.phone }}</p>
+                {% if order.customer.email %}<p class="text-sm">{{ order.customer.email }}</p>{% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Fulfillment</h2>
+                <p class="text-sm">Type:
+                    <span class="font-semibold">
+                        {% if order.delivery_type == 'DELIVERY' %}Delivery{% else %}Pickup{% endif %}
+                    </span>
+                </p>
+                {% if order.fulfillment_date %}
+                    <p class="text-sm">Ready by: <span class="font-semibold">{{ order.fulfillment_date|dt }}</span></p>
+                {% else %}
+                    <p class="text-sm text-base-content/50">No fulfillment time set</p>
+                {% endif %}
+                {% if order.delivery_address %}
+                    <p class="text-sm whitespace-pre-line mt-1">{{ order.delivery_address }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if shortages %}
+    <div class="alert alert-warning">
+        <div>
+            <p class="font-semibold">⚠️ Starting production will take these ingredients negative:</p>
+            <ul class="list-disc list-inside text-sm mt-1 space-y-0.5">
+                {% for s in shortages %}
+                <li>
+                    <strong>{{ s.ingredient.name }}</strong> —
+                    need {{ s.needed }} {{ s.ingredient.unit }},
+                    have {{ s.on_hand }} {{ s.ingredient.unit }},
+                    short by <strong>{{ s.shortfall }} {{ s.ingredient.unit }}</strong>
+                </li>
+                {% endfor %}
+            </ul>
+            <p class="text-xs mt-2 opacity-70">
+                You can still start production. Stock will go negative until you record a purchase.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Items</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-amber-900">
+                            <th>Item</th>
+                            <th class="text-right">Qty</th>
+                            <th class="text-right">Rate</th>
+                            <th class="text-right">GST</th>
+                            <th class="text-right">Line Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in order.items %}
+                        <tr>
+                            <td>
+                                <div class="font-medium">{{ item.product.name }}</div>
+                                <div class="text-xs text-base-content/50 font-mono">{{ item.product.sku }}</div>
+                                {% if item.customization_notes %}
+                                    <div class="text-xs text-base-content/60 mt-1">{{ item.customization_notes }}</div>
+                                {% endif %}
+                            </td>
+                            <td class="text-right">{{ item.quantity }}</td>
+                            <td class="text-right">{{ item.unit_price|money }}</td>
+                            <td class="text-right">{{ item.gst_amount|money }}</td>
+                            <td class="text-right font-medium">{{ item.line_total|money }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Payments</h2>
+            {% if order.payments %}
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-amber-900">
+                            <th>Date</th>
+                            <th>Method</th>
+                            <th>Reference</th>
+                            <th class="text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in order.payments %}
+                        <tr>
+                            <td>{{ p.received_at|dt }}</td>
+                            <td>{{ p.method }}</td>
+                            <td>{{ p.reference or "—" }}</td>
+                            <td class="text-right font-medium">{{ p.amount|money }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-sm text-base-content/50">No payments recorded yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Fulfillment</h2>
+
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <span class="badge {{ order.status_badge_class }}">{{ order.status.value.replace('_', ' ') }}</span>
+                    <span class="badge {{ order.payment_badge_class }}">{{ order.payment_label }}</span>
+                </div>
+                <p class="text-xs text-base-content/50 mb-3">
+                    Fulfillment and payment are tracked separately.
+                </p>
+
+                {% set st = order.status.value %}
+                {% set next_primary = {
+                    'INQUIRY':     'CONFIRMED',
+                    'CONFIRMED':   'IN_PROGRESS',
+                    'IN_PROGRESS': 'READY',
+                    'READY':       'DELIVERED',
+                    'DELIVERED':   'PAID'
+                }.get(st) %}
+
+                {% if next_primary %}
+                <div class="flex flex-wrap gap-2">
+                    {# Primary forward action #}
+                    <form hx-post="/orders/{{ order.id }}/status"
+                          hx-vals='{"status": "{{ next_primary }}"}'
+                          hx-swap="none"
+                          hx-on::after-request="if (event.detail.successful) window.location.reload()">
+                        <button class="btn btn-sm btn-primary">
+                            Mark {{ next_primary.replace('_', ' ') }}
+                        </button>
+                    </form>
+
+                    {# Cancellation options #}
+                    {% if st == 'IN_PROGRESS' %}
+                    <form hx-post="/orders/{{ order.id }}/status"
+                          hx-vals='{"status": "CANCELLED", "salvage": "true"}'
+                          hx-confirm="Return consumed ingredients to stock? Use this when the order is cancelled before or during baking and the ingredients are still usable."
+                          hx-swap="none"
+                          hx-on::after-request="if (event.detail.successful) window.location.reload()">
+                        <button class="btn btn-sm btn-outline btn-warning">Cancel · return stock</button>
+                    </form>
+                    <form hx-post="/orders/{{ order.id }}/status"
+                          hx-vals='{"status": "CANCELLED", "salvage": "false"}'
+                          hx-confirm="Write off all consumed ingredients as wastage? Consumption costs stay on this order."
+                          hx-swap="none"
+                          hx-on::after-request="if (event.detail.successful) window.location.reload()">
+                        <button class="btn btn-sm btn-outline btn-error">Cancel · waste</button>
+                    </form>
+                    {% elif st in ['INQUIRY', 'CONFIRMED', 'READY'] %}
+                    <form hx-post="/orders/{{ order.id }}/status"
+                          hx-vals='{"status": "CANCELLED"}'
+                          hx-confirm="{% if st == 'READY' %}Cancel this ready order? The food is already made. Ingredient costs will stand as a loss.{% else %}Cancel this order?{% endif %}"
+                          hx-swap="none"
+                          hx-on::after-request="if (event.detail.successful) window.location.reload()">
+                        <button class="btn btn-sm btn-outline btn-error">Cancel</button>
+                    </form>
+                    {% endif %}
+                </div>
+
+                {% if st == 'READY' %}
+                <p class="text-xs text-base-content/50 mt-2">
+                    Ready orders cannot return ingredients to stock — the food already exists.
+                </p>
+                {% endif %}
+
+                {% else %}
+                <p class="text-sm text-base-content/50">
+                    No further transitions — this order is in a terminal state.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Money</h2>
+
+                <div class="space-y-1 text-sm max-w-xs">
+                    <div class="flex justify-between">
+                        <span class="text-base-content/60">Total</span>
+                        <span class="font-semibold">{{ order.total_amount|money }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/60">Paid</span>
+                        <span>{{ order.advance_paid|money }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-base-content/60">Balance</span>
+                        <span class="font-bold {% if order.balance_due > 0 %}text-error{% else %}text-success{% endif %}">
+                            {{ order.balance_due|money }}
+                        </span>
+                    </div>
+
+                    {% if cogs > 0 %}
+                    <div class="border-t border-base-200 mt-2 pt-2 space-y-1">
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Ingredient cost</span>
+                            <span>{{ cogs|money }}</span>
+                        </div>
+                        {% set margin = order.total_amount - cogs %}
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Gross margin</span>
+                            <span class="font-semibold {% if margin > 0 %}text-success{% else %}text-error{% endif %}">
+                                {{ margin|money }}
+                            </span>
+                        </div>
+                        <p class="text-xs text-base-content/40 pt-1">
+                            Cost captured at production time. Doesn't change if prices move later.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% if order.balance_due > 0 and order.status.value != "CANCELLED" %}
+                <form method="post" action="/orders/{{ order.id }}/payments"
+                      class="mt-4 space-y-2 max-w-xs">
+                    <div class="flex gap-2">
+                        <input type="number" step="0.01" min="0.01" name="amount"
+                               class="input input-bordered input-sm flex-1 min-w-0"
+                               placeholder="Amount"
+                               value="{{ '%.2f'|format(order.balance_due) }}" required />
+                        <select name="method" class="select select-bordered select-sm w-24 shrink-0">
+                            <option value="CASH">Cash</option>
+                            <option value="UPI">UPI</option>
+                            <option value="BANK">Bank</option>
+                            <option value="CARD">Card</option>
+                        </select>
+                    </div>
+                    <input type="text" name="reference"
+                           class="input input-bordered input-sm w-full"
+                           placeholder="Reference (optional)" />
+                    <button class="btn btn-sm btn-primary w-full" type="submit">Record Payment</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if order.notes %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Notes</h2>
+            <p class="text-sm whitespace-pre-line">{{ order.notes }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block modals %}
+{% if whatsapp_messages %}
+<dialog id="wa-modal" class="modal modal-bottom sm:modal-middle"
+        onclick="if (event.target === this) closeWa()">
+    <div class="modal-box max-w-lg">
+        <h3 class="font-extrabold text-lg text-amber-900">Message {{ order.customer.name }}</h3>
+        <p class="text-xs text-base-content/60 mt-1 mb-3">
+            Pick a message. Edit the text if needed. Opens WhatsApp ready to send.
+        </p>
+
+        <div class="form-control">
+            <label class="label"><span class="label-text font-semibold">Message type</span></label>
+            <select id="wa-trigger" class="select select-bordered w-full"
+                    onchange="waUpdate()">
+                {% for m in whatsapp_messages %}
+                <option value="{{ m.key }}">{{ m.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-control mt-3">
+            <label class="label"><span class="label-text font-semibold">Message</span></label>
+            <textarea id="wa-text" rows="6" class="textarea textarea-bordered w-full"
+                      oninput="waSync()"></textarea>
+        </div>
+
+        <div class="modal-action">
+            <button type="button" class="btn btn-ghost" onclick="closeWa()">Cancel</button>
+            <button type="button" class="btn btn-outline" onclick="waCopy()">Copy</button>
+            <a id="wa-open" href="#" target="_blank" rel="noopener" class="btn btn-primary">Open WhatsApp</a>
+        </div>
+    </div>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if whatsapp_messages %}
+<script>
+const WA_MESSAGES = {{ whatsapp_messages|tojson }};
+let waCurrentUrl = '';
+
+function openWa() {
+    if (!WA_MESSAGES.length) return;
+    document.getElementById('wa-trigger').selectedIndex = 0;
+    waUpdate();
+    document.getElementById('wa-modal').showModal();
+}
+function closeWa() {
+    document.getElementById('wa-modal').close();
+}
+function waUpdate() {
+    const key = document.getElementById('wa-trigger').value;
+    const found = WA_MESSAGES.find(m => m.key === key);
+    if (!found) return;
+    document.getElementById('wa-text').value = found.message;
+    waCurrentUrl = found.url;
+    document.getElementById('wa-open').href = found.url;
+}
+function waSync() {
+    const phone = {{ order.customer.phone|tojson }};
+    const text = document.getElementById('wa-text').value;
+    const digits = phone.replace(/\D+/g, '');
+    const normalized = (digits.length === 10)
+        ? ('{{ settings.whatsapp_default_country_code }}' + digits)
+        : digits;
+    document.getElementById('wa-open').href =
+        `https://wa.me/${normalized}?text=${encodeURIComponent(text)}`;
+}
+async function waCopy() {
+    const text = document.getElementById('wa-text').value;
+    try {
+        await navigator.clipboard.writeText(text);
+        toast('Message copied', 'success');
+    } catch (e) {
+        toast('Copy failed — select and copy manually', 'error');
+    }
+}
+</script>
+{% endif %}
+{% endblock %}
