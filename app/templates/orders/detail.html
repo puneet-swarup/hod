@@ -6,8 +6,13 @@
 
     <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
-            <h1 class="text-2xl font-extrabold text-amber-900">{{ order.order_number }}</h1>
-            <p class="text-sm text-base-content/60">Placed {{ order.order_date|dt }}</p>
+            <div class="flex items-center gap-2 flex-wrap">
+                <h1 class="text-2xl font-extrabold text-amber-900">{{ order.order_number }}</h1>
+                {% if order.is_b2b %}
+                <span class="badge badge-primary badge-sm">B2B</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-base-content/60">Placed {{ order.order_date|ld }}</p>
         </div>
         <div class="flex gap-2 flex-wrap">
             {% if whatsapp_messages %}
@@ -26,10 +31,33 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body">
-                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer</h2>
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">
+                    {{ "Partner" if order.is_b2b else "Customer" }}
+                </h2>
+                {% if order.is_b2b and order.account %}
+                <p class="font-semibold text-lg">
+                    <a href="/b2b/{{ order.account.id }}" class="hover:underline">{{ order.account.name }}</a>
+                </p>
+                <p class="text-sm font-mono text-base-content/60">{{ order.account.code }}</p>
+                <p class="text-sm">{{ order.account.phone or order.customer.phone }}</p>
+                {% if order.account.gstin %}
+                <p class="text-xs font-mono text-base-content/60 mt-1">GSTIN: {{ order.account.gstin }}</p>
+                {% endif %}
+                {% if order.b2b_terms and order.b2b_terms.po_reference %}
+                <p class="text-xs mt-1">PO ref: <span class="font-mono">{{ order.b2b_terms.po_reference }}</span></p>
+                {% endif %}
+                {% if order.b2b_terms %}
+                <p class="text-xs text-base-content/60 mt-1">
+                    {{ order.b2b_terms.payment_terms.value.title() }} terms
+                    {%- if order.b2b_terms.credit_days %} · {{ order.b2b_terms.credit_days }} days{% endif %}
+                    {%- if order.b2b_terms.dispatch_date %} · dispatch {{ order.b2b_terms.dispatch_date.strftime('%d %b') }}{% endif %}
+                </p>
+                {% endif %}
+                {% else %}
                 <p class="font-semibold text-lg">{{ order.customer.name }}</p>
                 <p class="text-sm">{{ order.customer.phone }}</p>
                 {% if order.customer.email %}<p class="text-sm">{{ order.customer.email }}</p>{% endif %}
+                {% endif %}
             </div>
         </div>
 

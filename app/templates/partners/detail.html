@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}{{ account.name }} — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <div class="flex justify-between items-start flex-wrap gap-2">
+        <div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <h1 class="text-2xl font-extrabold text-amber-900">{{ account.name }}</h1>
+                <span class="badge badge-ghost badge-sm">{{ account.kind_label }}</span>
+                {% if not account.is_active %}
+                <span class="badge badge-error badge-sm">Inactive</span>
+                {% endif %}
+            </div>
+            <p class="text-sm text-base-content/60 font-mono">
+                {{ account.code }}{% if account.gstin %} · GSTIN {{ account.gstin }}{% endif %}
+            </p>
+        </div>
+        <div class="flex gap-2">
+            <a href="/b2b/{{ account.id }}/statement" class="btn btn-ghost btn-sm">Statement</a>
+            <a href="/b2b/{{ account.id }}/edit" class="btn btn-outline btn-sm">Edit</a>
+            <a href="/orders/new?account_id={{ account.id }}" class="btn btn-amber btn-sm font-semibold">+ New order</a>
+        </div>
+    </div>
+
+    <!-- Terms + credit -->
+    <div class="grid gap-3 md:grid-cols-2">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-2">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Credit</h2>
+                <div class="flex justify-between items-end">
+                    <div>
+                        <p class="text-xs text-base-content/50">Outstanding</p>
+                        <p class="text-2xl font-extrabold font-mono {% if credit.over_limit %}text-error{% endif %}">
+                            {{ credit.outstanding|money }}
+                        </p>
+                    </div>
+                    {% if credit.has_limit %}
+                    <div class="text-right">
+                        <p class="text-xs text-base-content/50">Limit</p>
+                        <p class="font-mono font-semibold {% if credit.over_limit %}text-error{% endif %}">
+                            {{ credit.limit|money }}
+                        </p>
+                    </div>
+                    {% else %}
+                    <span class="badge badge-ghost badge-sm">No limit set</span>
+                    {% endif %}
+                </div>
+                {% if credit.has_limit %}
+                <progress class="progress {% if credit.over_limit %}progress-error{% else %}progress-warning{% endif %} w-full"
+                          value="{{ [ (credit.projected / credit.limit * 100) if credit.limit > 0 else 0, 100 ] | min }}"
+                          max="100"></progress>
+                {% endif %}
+                <p class="text-xs text-base-content/60">
+                    {{ account.credit_days }} day terms. Exceeding the limit only warns.
+                </p>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-2">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Standing terms</h2>
+                <dl class="text-sm space-y-1">
+                    <div class="flex justify-between"><dt class="text-base-content/60">Minimum order</dt>
+                        <dd class="font-mono">{{ terms.min_order_value|money }}</dd></div>
+                    <div class="flex justify-between"><dt class="text-base-content/60">Order cut-off</dt>
+                        <dd class="font-mono">{{ account.order_cutoff }}</dd></div>
+                    <div class="flex justify-between"><dt class="text-base-content/60">Lead time</dt>
+                        <dd class="font-mono">{{ account.lead_time_hours }}h</dd></div>
+                    <div class="flex justify-between"><dt class="text-base-content/60">Dispatch days</dt>
+                        <dd class="font-mono">
+                            {% for d, label in [(1,'Mon'),(2,'Tue'),(3,'Wed'),(4,'Thu'),(5,'Fri'),(6,'Sat'),(7,'Sun')] %}
+                                {%- if d in account.dispatch_weekdays %}{{ label }}{{ ' ' if not loop.last }}{% endif -%}
+                            {% endfor %}
+                        </dd></div>
+                    <div class="flex justify-between"><dt class="text-base-content/60">Production</dt>
+                        <dd>
+                            {% if account.production_mode == 'DEDICATED' %}
+                            <span class="badge badge-info badge-sm">Dedicated line</span>
+                            {% else %}
+                            <span class="badge badge-ghost badge-sm">Shared with retail</span>
+                            {% endif %}
+                        </dd></div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contract + price list -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-3">
+            <div class="flex justify-between items-center flex-wrap gap-2">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Contract &amp; price list</h2>
+                {% if contract %}
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="badge badge-primary badge-sm">{{ contract.label }}</span>
+                    <span class="badge badge-ghost badge-sm">{{ contract.mode_label }}</span>
+                    <span class="text-xs text-base-content/50 font-mono">
+                        from {{ contract.effective_from.strftime('%d %b %Y') }}{% if contract.effective_to %}
+                        to {{ contract.effective_to.strftime('%d %b %Y') }}{% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if not contract %}
+            <div class="alert alert-warning text-sm py-2">
+                <span>No contract covers today. Every product is charged at retail price.</span>
+            </div>
+            {% endif %}
+
+            {% if contract %}
+                {% set items = contract.price_items | selectattr('is_active') | list %}
+                {% if items %}
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr class="text-amber-900">
+                                <th>Product</th>
+                                <th class="text-right">From qty</th>
+                                <th class="text-right whitespace-nowrap">Rate</th>
+                                <th class="text-right hidden sm:table-cell">GST</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr class="hover">
+                                <td>
+                                    <div class="text-sm font-medium">{{ item.product.name }}</div>
+                                    <div class="text-xs text-base-content/50 font-mono">{{ item.product.sku }}</div>
+                                </td>
+                                <td class="text-right font-mono text-sm">{{ item.min_qty }}</td>
+                                <td class="text-right text-sm">
+                                    {% if item.unit_price is not none %}
+                                    <span class="font-mono font-semibold">{{ item.unit_price|money }}</span>
+                                    {% else %}
+                                    <span class="badge badge-info badge-sm whitespace-nowrap">MRP − {{ item.commission_pct|pct }}%</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-right hidden sm:table-cell text-sm font-mono text-base-content/60">
+                                    {{ (item.gst_rate if item.gst_rate is not none else item.product.gst_rate) }}%
+                                </td>
+                                <td class="text-right">
+                                    <form method="post" action="/b2b/{{ account.id }}/prices/{{ item.id }}/delete">
+                                        <button class="btn btn-ghost btn-xs" type="submit"
+                                                onclick="return confirm('Remove this rate?')">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-sm text-base-content/50">
+                    No rates yet — this partner pays retail price until you add one.
+                </p>
+                {% endif %}
+            {% endif %}
+
+            {% if contract %}
+            <form method="post" action="/b2b/{{ account.id }}/prices"
+                  class="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end pt-2 border-t border-base-200">
+                <input type="hidden" name="contract_id" value="{{ contract.id }}" />
+                <div class="col-span-2 sm:col-span-5 form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">Product</span></label>
+                    <select name="product_id" class="select select-bordered select-sm w-full" required>
+                        <option value="">Select…</option>
+                        {% for p in products %}
+                        <option value="{{ p.id }}">{{ p.name }} · {{ p.sku }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">From qty</span></label>
+                    <input type="number" min="1" name="min_qty" value="1"
+                           class="input input-bordered input-sm w-full" />
+                </div>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">Rate {{ settings.currency }}</span></label>
+                    <input type="number" step="0.01" min="0" name="unit_price"
+                           class="input input-bordered input-sm w-full" placeholder="—" />
+                </div>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">or comm. %</span></label>
+                    <input type="number" step="0.01" min="0" max="100" name="commission_pct"
+                           class="input input-bordered input-sm w-full" placeholder="—" />
+                </div>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">GST %</span></label>
+                    <input type="number" step="0.01" min="0" name="gst_rate"
+                           class="input input-bordered input-sm w-full" placeholder="auto" />
+                </div>
+                <div class="col-span-2 sm:col-span-12">
+                    <button class="btn btn-sm btn-outline" type="submit">Add / update rate</button>
+                    <span class="text-xs text-base-content/50 ml-2">
+                        Fill a rate, or a commission — not both. Commission is taken off the retail price.
+                    </span>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- New contract -->
+    <details class="card bg-base-100 shadow-sm">
+        <summary class="card-body cursor-pointer">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">New contract version</h2>
+            <p class="text-xs text-base-content/60">
+                Prices are versioned. To change rates, close the current contract and start a new one —
+                past orders keep the rate they were billed at.
+            </p>
+        </summary>
+        <div class="card-body pt-0">
+            <form method="post" action="/b2b/{{ account.id }}/contracts" class="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end">
+                <div class="col-span-2 sm:col-span-4 form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">Label</span></label>
+                    <input type="text" name="label" required class="input input-bordered input-sm w-full"
+                           placeholder="FY27 rates" />
+                </div>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">From</span></label>
+                    <input type="date" name="effective_from" required class="input input-bordered input-sm w-full"
+                           value="{{ today_iso }}" />
+                </div>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">To</span></label>
+                    <input type="date" name="effective_to" class="input input-bordered input-sm w-full" />
+                </div>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">Mode</span></label>
+                    <select name="pricing_mode" class="select select-bordered select-sm w-full">
+                        <option value="UNIT_PRICE">Unit price</option>
+                        <option value="COMMISSION">Commission</option>
+                    </select>
+                </div>
+                <div class="form-control">
+                    <label class="label py-1"><span class="label-text text-xs font-semibold">Default comm. %</span></label>
+                    <input type="number" step="0.01" min="0" max="100" name="default_commission_pct"
+                           class="input input-bordered input-sm w-full" placeholder="—" />
+                </div>
+                <div class="col-span-2 sm:col-span-12">
+                    <button class="btn btn-sm btn-primary" type="submit">Create contract</button>
+                </div>
+            </form>
+        </div>
+    </details>
+
+    <!-- Recent orders -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-2">
+            <div class="flex justify-between items-center">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Recent orders</h2>
+                <a href="/orders" class="btn btn-ghost btn-xs">All orders</a>
+            </div>
+            {% if orders %}
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-amber-900">
+                            <th>Order</th>
+                            <th class="hidden sm:table-cell">PO ref</th>
+                            <th>Status</th>
+                            <th class="text-right">Total</th>
+                            <th class="text-right">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for o in orders %}
+                        <tr class="hover">
+                            <td>
+                                <a href="/orders/{{ o.id }}" class="font-mono text-sm hover:underline">{{ o.order_number }}</a>
+                                <div class="text-xs text-base-content/50">{{ o.fulfillment_date.strftime('%d %b') if o.fulfillment_date else '—' }}</div>
+                            </td>
+                            <td class="hidden sm:table-cell text-xs font-mono text-base-content/60">
+                                {{ o.b2b_terms.po_reference if o.b2b_terms and o.b2b_terms.po_reference else '—' }}
+                            </td>
+                            <td>
+                                <span class="badge {{ o.status_badge_class }} badge-sm">
+                                    {{ o.status.value.replace('_', ' ') }}
+                                </span>
+                            </td>
+                            <td class="text-right font-mono text-sm">{{ o.total_amount|money }}</td>
+                            <td class="text-right font-mono text-sm {% if o.balance_due > 0 %}text-error{% endif %}">
+                                {{ o.balance_due|money }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-sm text-base-content/50 py-3">No orders for this partner yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Margin -->
+    {% if margin %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-2">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Margin by product</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-amber-900">
+                            <th>Product</th>
+                            <th class="text-right">Qty</th>
+                            <th class="text-right">Revenue</th>
+                            <th class="text-right hidden sm:table-cell">COGS</th>
+                            <th class="text-right">Margin</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in margin %}
+                        <tr class="hover">
+                            <td class="text-sm">{{ m.name }}</td>
+                            <td class="text-right font-mono text-sm">{{ m.quantity }}</td>
+                            <td class="text-right font-mono text-sm">{{ m.revenue|money }}</td>
+                            <td class="text-right hidden sm:table-cell font-mono text-sm text-base-content/60">{{ m.cogs|money }}</td>
+                            <td class="text-right font-mono text-sm {% if m.margin < 0 %}text-error font-semibold{% endif %}">
+                                {{ m.margin|money }}
+                                <span class="text-xs text-base-content/50">{{ m.margin_pct }}%</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

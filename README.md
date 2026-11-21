@@ -30,6 +30,14 @@ the private network.
 - Today page: dispatch list (orders fulfilling today, sorted by time) + production needs aggregated by SKU across the next 7 days
 - Production keeps late work visible: orders past their fulfillment date stay in an **Overdue** bucket until they are delivered or cancelled, and every row shows the earliest fulfillment date and time
 
+**Wholesale (B2B)**
+
+- Partner accounts: shops and franchisees with their own credit terms, minimum order value, cut-off, lead time and dispatch days
+- Versioned contracts with a price list per product, quantity slabs, and **either** a unit price **or** a commission off MRP
+- B2B orders ride the same pipeline as retail: production, ingredient deduction, COGS, invoices, statements
+- Commercial checks (minimum order, cut-off, lead time, dispatch day, credit limit) warn on the order — nothing is blocked
+- Partner GSTIN and PO reference on the invoice; per-partner statement with CSV export; margin per product per partner
+
 **Products and recipes**
 - SKU auto-generated from name + weight + pack, editable, live uniqueness check
 - Weight/volume and pack size support

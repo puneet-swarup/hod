@@ -120,7 +120,7 @@
                                 </span>
                             </td>
                             <td class="text-right">{{ order.total_amount|money }}</td>
-                            <td class="hidden md:table-cell text-base-content/60 text-sm">{{ order.order_date|d }}</td>
+                            <td class="hidden md:table-cell text-base-content/60 text-sm">{{ order.order_date|ld }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

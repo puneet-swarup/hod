@@ -21,14 +21,25 @@ from app.utils.money import money
 from app.utils.time import business_day_bounds_utc
 
 
-def _bounds(start_date: str, end_date: str) -> tuple[datetime, datetime]:
-    start, _ = business_day_bounds_utc(start_date)
-    _, end = business_day_bounds_utc(end_date)
-    return start, end
+def _bounds(start_date: str, end_date: str) -> tuple[datetime, datetime, datetime, datetime]:
+    """(start_utc, end_utc, start_local, end_local).
+
+    Two different columns are filtered here and they do not share a clock:
+    ``Order.order_date`` is a naive LOCAL date (ADR-0017) while
+    ``Payment.received_at`` is naive UTC. Mixing the two shifts a day
+    boundary by 5h30m, so both ranges are returned.
+    """
+    start_utc, _ = business_day_bounds_utc(start_date)
+    _, end_utc = business_day_bounds_utc(end_date)
+    start_local = datetime.fromisoformat(start_date)
+    end_local = datetime.fromisoformat(end_date).replace(
+        hour=23, minute=59, second=59, microsecond=999999
+    )
+    return start_utc, end_utc, start_local, end_local
 
 
 def export_orders_csv(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
-    start, end = _bounds(start_date, end_date)
+    start_utc, end_utc, start, end = _bounds(start_date, end_date)
 
     orders = (
         db.execute(
@@ -86,7 +97,7 @@ def export_orders_csv(db: Session, start_date: str, end_date: str) -> tuple[str,
 
 
 def export_payments_csv(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
-    start, end = _bounds(start_date, end_date)
+    start_utc, end_utc, start, end = _bounds(start_date, end_date)
 
     orders = (
         db.execute(
@@ -116,7 +127,8 @@ def export_payments_csv(db: Session, start_date: str, end_date: str) -> tuple[st
     for order in orders:
         running = Decimal("0.00")
         for p in order.payments:
-            if start <= p.received_at <= end:
+            # received_at is UTC, so it is filtered with the UTC bounds.
+            if start_utc <= p.received_at <= end_utc:
                 running += money(p.amount)
                 writer.writerow(
                     [
@@ -134,7 +146,7 @@ def export_payments_csv(db: Session, start_date: str, end_date: str) -> tuple[st
 
 
 def export_summary_json(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
-    start, end = _bounds(start_date, end_date)
+    start_utc, end_utc, start, end = _bounds(start_date, end_date)
 
     orders = (
         db.execute(

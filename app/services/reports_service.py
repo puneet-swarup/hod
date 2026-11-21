@@ -2,8 +2,9 @@
 Monthly reports — PDF (for reading/printing) and CSV (for Excel/CA).
 
 A report for month M covers orders whose order_date falls within M in
-the BUSINESS timezone. order_date is stored as naive UTC, so we convert
-the business-tz month bounds to UTC before filtering.
+the BUSINESS timezone. order_date is stored as a naive LOCAL datetime —
+the business calendar date the order was placed (ADR-0017) — so the
+month bounds are compared as local naive values, with no conversion.
 
 Output files (regenerating overwrites):
     <reports_dir>/2026-09.pdf
@@ -24,7 +25,6 @@ import io
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -51,25 +51,17 @@ MONTH_NAMES = [
 ]
 
 
-def _month_bounds_utc(year: int, month: int) -> tuple[datetime, datetime]:
-    """
-    Return (start_utc, end_utc) as naive UTC datetimes for filtering
-    against Order.order_date. Month is interpreted in business timezone.
-    """
-    settings = get_settings()
-    tz = ZoneInfo(settings.business_timezone)
+def _month_bounds_local(year: int, month: int) -> tuple[datetime, datetime]:
+    """Naive LOCAL bounds for filtering against Order.order_date.
 
-    local_start = datetime(year, month, 1, tzinfo=tz)
-    if month == 12:
-        next_month = datetime(year + 1, 1, 1, tzinfo=tz)
-    else:
-        next_month = datetime(year, month + 1, 1, tzinfo=tz)
+    order_date carries the business calendar date (ADR-0017), so both the
+    column and the bounds are local naive values — converting either side
+    would shift a month boundary by 5h30m.
+    """
+    local_start = datetime(year, month, 1)
+    next_month = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
     local_end = next_month - timedelta(microseconds=1)
-
-    return (
-        local_start.astimezone(tz).astimezone(ZoneInfo("UTC")).replace(tzinfo=None),
-        local_end.astimezone(ZoneInfo("UTC")).replace(tzinfo=None),
-    )
+    return local_start, local_end
 
 
 def _reports_dir() -> Path:
@@ -102,13 +94,13 @@ def build_report(db: Session, year: int, month: int) -> dict:
 
     from app.models import MovementReason, StockMovement
 
-    start_utc, end_utc = _month_bounds_utc(year, month)
+    start_local, end_local = _month_bounds_local(year, month)
 
     all_orders = (
         db.execute(
             select(Order)
             .options(selectinload(Order.items), selectinload(Order.customer))
-            .where(Order.order_date >= start_utc, Order.order_date <= end_utc)
+            .where(Order.order_date >= start_local, Order.order_date <= end_local)
             .order_by(Order.order_date.asc())
         )
         .scalars()

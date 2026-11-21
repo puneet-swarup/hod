@@ -9,8 +9,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Customer, OrderStatus, Product
-from app.services import invoice_service, order_service
+from app.models import B2bAccount, Customer, OrderStatus, Product
+from app.services import b2b_service, invoice_service, order_service
 from app.utils.time import business_now
 
 router = APIRouter()
@@ -27,6 +27,35 @@ def _product_and_customer_choices(db: Session):
     customers = db.query(Customer).where(Customer.is_active.is_(True)).order_by(Customer.name).all()
     products = db.query(Product).where(Product.is_active.is_(True)).order_by(Product.name).all()
     return customers, products
+
+
+def _render_order_form_error(
+    request: Request,
+    db: Session,
+    message: str,
+    status_code: int = 400,
+    data: dict | None = None,
+):
+    """Re-render the create form with an error banner, keeping what was typed."""
+    templates = request.app.state.templates
+    settings = request.app.state.settings
+    customers, products = _product_and_customer_choices(db)
+    return templates.TemplateResponse(
+        request=request,
+        name="orders/form.html",
+        context={
+            "settings": settings,
+            "customers": customers,
+            "products": products,
+            "today_date": business_now().strftime("%Y-%m-%d"),
+            "default_fulfillment": _default_fulfillment(),
+            "mode": "create",
+            "form_action": "/orders/",
+            "error": message,
+            "form_data": data or {},
+        },
+        status_code=status_code,
+    )
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -80,6 +109,7 @@ def list_orders_page(
 def new_order_form(
     request: Request,
     from_order_id: int | None = None,
+    account_id: int | None = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -93,6 +123,11 @@ def new_order_form(
     preset_customer_id: int | None = None
     preset_items: list[dict] = []
     source_order_number: str | None = None
+    preset_account: B2bAccount | None = None
+
+    if account_id is not None:
+        preset_account = b2b_service.get_account(db, account_id)
+        preset_customer_id = preset_account.customer_id
 
     if from_order_id is not None:
         try:
@@ -125,6 +160,7 @@ def new_order_form(
             "preset_customer_id": preset_customer_id,
             "preset_items": preset_items,
             "source_order_number": source_order_number,
+            "preset_account": preset_account,
         },
     )
 
@@ -133,7 +169,12 @@ def new_order_form(
 def create_order(
     request: Request,
     db: Session = Depends(get_db),
-    customer_id: int = Form(...),
+    customer_id: str = Form("0"),
+    channel: str = Form("RETAIL"),
+    account_id: str = Form(""),
+    po_reference: str = Form(None),
+    payment_terms: str = Form("CREDIT"),
+    dispatch_date: str = Form(None),
     delivery_type: str = Form("PICKUP"),
     fulfillment_date: str = Form(None),
     delivery_address: str = Form(None),
@@ -151,8 +192,19 @@ def create_order(
         {"product_id": pid, "quantity": qty} for pid, qty in zip(product_id, quantity, strict=True)
     ]
 
+    account_pk = int(account_id) if (account_id or "").strip().isdigit() else None
+    if (channel or "RETAIL").upper() == "B2B" and account_pk is None:
+        return _render_order_form_error(
+            request, db, "Pick a B2B partner, or switch back to Retail.", 400
+        )
+
     data = {
-        "customer_id": customer_id,
+        "customer_id": int(customer_id or 0),
+        "channel": (channel or "RETAIL").upper(),
+        "account_id": account_pk,
+        "po_reference": po_reference,
+        "payment_terms": payment_terms,
+        "dispatch_date": dispatch_date,
         "order_date": order_date,
         "delivery_type": delivery_type,
         "fulfillment_date": fulfillment_date or None,
@@ -223,6 +275,9 @@ def update_order(
     request: Request,
     order_id: int,
     db: Session = Depends(get_db),
+    po_reference: str = Form(None),
+    payment_terms: str = Form("CREDIT"),
+    dispatch_date: str = Form(None),
     delivery_type: str = Form("PICKUP"),
     fulfillment_date: str = Form(None),
     delivery_address: str = Form(None),
@@ -238,6 +293,9 @@ def update_order(
     ]
 
     data = {
+        "po_reference": po_reference,
+        "payment_terms": payment_terms,
+        "dispatch_date": dispatch_date,
         "delivery_type": delivery_type,
         "fulfillment_date": fulfillment_date or None,
         "delivery_address": delivery_address or None,

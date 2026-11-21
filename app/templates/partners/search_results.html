@@ -1,0 +1,21 @@
+{% if results %}
+{% for a in results %}
+<div class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-amber-50 cursor-pointer
+            border-b border-base-200 last:border-0 partner-result"
+     data-id="{{ a.id }}"
+     data-name="{{ a.name }}"
+     data-code="{{ a.code }}"
+     data-customer-id="{{ a.customer_id or '' }}"
+     data-credit-days="{{ a.credit_days }}"
+     data-cutoff="{{ a.order_cutoff }}"
+     data-production-mode="{{ a.production_mode }}">
+    <div class="min-w-0">
+        <div class="font-medium text-sm truncate">{{ a.name }}</div>
+        <div class="text-xs text-base-content/50 font-mono">{{ a.code }} · {{ a.credit_days }}d credit</div>
+    </div>
+    <span class="badge badge-ghost badge-xs">{{ a.kind_label }}</span>
+</div>
+{% endfor %}
+{% else %}
+<div class="px-3 py-3 text-sm text-base-content/50">No partners found for "{{ q }}"</div>
+{% endif %}

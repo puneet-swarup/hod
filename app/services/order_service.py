@@ -15,7 +15,7 @@ Key guarantees:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -35,11 +35,11 @@ from app.models import (
     Product,
     StockMovement,
 )
-from app.services import inventory_service, recipe_service
+from app.services import b2b_service, inventory_service, recipe_service
 from app.services.audit_service import log_action
-from app.services.numbering import next_order_number
+from app.services.numbering import next_b2b_order_number, next_order_number
 from app.utils.money import gst_for_line, line_total_with_gst, money
-from app.utils.time import utcnow
+from app.utils.time import business_now, utcnow
 
 settings = get_settings()
 
@@ -162,13 +162,23 @@ def create_order(db: Session, data: dict) -> Order:
     if not items_data:
         raise HTTPException(status_code=400, detail="An order must have at least one item")
 
-    customer = db.get(Customer, data["customer_id"])
-    if not customer or not customer.is_active:
-        raise HTTPException(status_code=400, detail="Invalid or inactive customer")
+    account = None
+    if data.get("account_id"):
+        account = b2b_service.get_account(db, int(data["account_id"]))
+        if not account.is_active:
+            raise HTTPException(status_code=400, detail="That partner is inactive")
+        if not account.customer_id:
+            raise HTTPException(
+                status_code=400, detail="That partner has no billing customer attached"
+            )
+    else:
+        customer = db.get(Customer, data["customer_id"])
+        if not customer or not customer.is_active:
+            raise HTTPException(status_code=400, detail="Invalid or inactive customer")
 
     for attempt in range(2):
         try:
-            order = _build_order(db, data, items_data)
+            order = _build_order(db, data, items_data, account)
             db.commit()
             db.refresh(order)
             return order
@@ -221,9 +231,19 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
         ],
     }
 
+    # A B2B order is re-priced from its contract on every edit, using the
+    # same evaluation the form quotes.
+    account = order.account if order.is_b2b else None
+    evaluation = (
+        b2b_service.evaluate_order(db, account, items_data, fulfillment_date)
+        if account is not None
+        else None
+    )
+    priced_lines = evaluation["lines"] if evaluation is not None else None
+
     new_line_totals: list[dict] = []
     new_total = Decimal("0.00")
-    for item_data in items_data:
+    for idx, item_data in enumerate(items_data):
         product = db.get(Product, item_data["product_id"])
         if not product or not product.is_active:
             raise HTTPException(
@@ -234,8 +254,12 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
         if qty <= 0:
             raise HTTPException(status_code=400, detail="Quantity must be positive")
 
-        unit_price = money(product.base_price)
-        gst_rate = money(product.gst_rate)
+        if priced_lines is not None:
+            unit_price = priced_lines[idx]["unit_price"]
+            gst_rate = priced_lines[idx]["gst_rate"]
+        else:
+            unit_price = money(product.base_price)
+            gst_rate = money(product.gst_rate)
         gst_amount = gst_for_line(unit_price, qty, gst_rate)
         line_total = line_total_with_gst(unit_price, qty, gst_amount)
 
@@ -277,6 +301,29 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
 
     order.total_amount = new_total
     order.balance_due = money(new_total - order.advance_paid)
+
+    if account is not None and evaluation is not None and order.b2b_terms is not None:
+        import json as _json
+
+        order.b2b_terms.warnings_json = _json.dumps(evaluation["warnings"])
+        order.b2b_terms.price_snapshot = _json.dumps(
+            [
+                {
+                    "product_id": ln["product_id"],
+                    "sku": ln["sku"],
+                    "quantity": ln["quantity"],
+                    "unit_price": str(ln["unit_price"]),
+                    "gst_rate": str(ln["gst_rate"]),
+                    "source": ln["source"],
+                }
+                for ln in evaluation["lines"]
+            ]
+        )
+        if data.get("po_reference") is not None:
+            order.b2b_terms.po_reference = (data.get("po_reference") or "").strip() or None
+        dispatch = _parse_date(data.get("dispatch_date"))
+        if dispatch is not None:
+            order.b2b_terms.dispatch_date = dispatch
 
     log_action(
         db,
@@ -542,7 +589,7 @@ def order_cogs(db: Session, order_id: int) -> Decimal:
 # ===============================================================
 
 
-def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
+def _build_order(db: Session, data: dict, items_data: list[dict], account=None) -> Order:
     fulfillment_date = _parse_dt(data.get("fulfillment_date"))
     if not fulfillment_date:
         raise HTTPException(
@@ -550,13 +597,27 @@ def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
             detail="Fulfillment date is required",
         )
 
-    order_number = next_order_number(db)
+    # B2B orders are priced once, by the same evaluation the form quoted, so
+    # the stored order and the preview can never disagree.
+    evaluation = None
+    if account is not None:
+        evaluation = b2b_service.evaluate_order(db, account, items_data, fulfillment_date)
+        order_number = next_b2b_order_number(db)
+        customer_id = account.customer_id
+    else:
+        order_number = next_order_number(db)
+        customer_id = data["customer_id"]
 
     order = Order(
         order_number=order_number,
-        customer_id=data["customer_id"],
+        customer_id=customer_id,
+        channel="B2B" if account is not None else "RETAIL",
+        account_id=account.id if account is not None else None,
         status=OrderStatus.CONFIRMED,
-        order_date=_parse_dt(data.get("order_date")) or utcnow(),
+        # order_date is the business calendar date the order was placed,
+        # stored as a naive LOCAL datetime (ADR-0017). Default to local now,
+        # never utcnow(), or the date flips for orders placed after 18:30 IST.
+        order_date=_parse_dt(data.get("order_date")) or business_now().replace(tzinfo=None),
         delivery_type=data.get("delivery_type", "PICKUP"),
         fulfillment_date=fulfillment_date,
         delivery_address=data.get("delivery_address") or None,
@@ -566,36 +627,53 @@ def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
     db.flush()
 
     total = Decimal("0.00")
-    for item_data in items_data:
-        product = db.get(Product, item_data["product_id"])
-        if not product or not product.is_active:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid or inactive product: {item_data['product_id']}",
+
+    if evaluation is not None:
+        for idx, line in enumerate(evaluation["lines"]):
+            db.add(
+                OrderItem(
+                    order_id=order.id,
+                    product_id=line["product_id"],
+                    quantity=line["quantity"],
+                    unit_price=line["unit_price"],
+                    gst_rate=line["gst_rate"],
+                    gst_amount=line["gst_amount"],
+                    line_total=line["line_total"],
+                    customization_notes=(items_data[idx].get("customization_notes") or None),
+                )
             )
-        qty = int(item_data["quantity"])
-        if qty <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be positive")
+        total = evaluation["total"]
+    else:
+        for item_data in items_data:
+            product = db.get(Product, item_data["product_id"])
+            if not product or not product.is_active:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid or inactive product: {item_data['product_id']}",
+                )
+            qty = int(item_data["quantity"])
+            if qty <= 0:
+                raise HTTPException(status_code=400, detail="Quantity must be positive")
 
-        unit_price = money(product.base_price)
-        gst_rate = money(product.gst_rate)
-        gst_amount = gst_for_line(unit_price, qty, gst_rate)
-        line_total = line_total_with_gst(unit_price, qty, gst_amount)
+            unit_price = money(product.base_price)
+            gst_rate = money(product.gst_rate)
+            gst_amount = gst_for_line(unit_price, qty, gst_rate)
+            line_total = line_total_with_gst(unit_price, qty, gst_amount)
 
-        total += line_total
+            total += line_total
 
-        db.add(
-            OrderItem(
-                order_id=order.id,
-                product_id=product.id,
-                quantity=qty,
-                unit_price=unit_price,
-                gst_rate=gst_rate,
-                gst_amount=gst_amount,
-                line_total=line_total,
-                customization_notes=item_data.get("customization_notes") or None,
+            db.add(
+                OrderItem(
+                    order_id=order.id,
+                    product_id=product.id,
+                    quantity=qty,
+                    unit_price=unit_price,
+                    gst_rate=gst_rate,
+                    gst_amount=gst_amount,
+                    line_total=line_total,
+                    customization_notes=item_data.get("customization_notes") or None,
+                )
             )
-        )
 
     advance = money(data.get("advance_paid") or 0)
     if advance < 0:
@@ -616,6 +694,17 @@ def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
             )
         )
 
+    if account is not None and evaluation is not None:
+        b2b_service.attach_order_terms(
+            db,
+            order,
+            account,
+            evaluation,
+            po_reference=data.get("po_reference"),
+            dispatch_date=_parse_date(data.get("dispatch_date")),
+            payment_terms=data.get("payment_terms") or "CREDIT",
+        )
+
     log_action(
         db,
         entity_type="Order",
@@ -631,6 +720,20 @@ def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
         },
     )
     return order
+
+
+def _parse_date(value):
+    """ISO date string -> date. None/blank -> None."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
 
 
 def _parse_dt(value):

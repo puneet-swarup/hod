@@ -3,6 +3,15 @@
 from app.database import Base
 from app.models.address import Address
 from app.models.audit_log import AuditLog
+from app.models.b2b import (
+    AccountKind,
+    B2bAccount,
+    B2bContract,
+    B2bOrderTerms,
+    B2bPriceItem,
+    PaymentTerms,
+    PricingMode,
+)
 from app.models.customer import Customer
 from app.models.ingredient import Ingredient, IngredientKind
 from app.models.invoice import Invoice
@@ -17,6 +26,13 @@ __all__ = [
     "Base",
     "Address",
     "AuditLog",
+    "AccountKind",
+    "B2bAccount",
+    "B2bContract",
+    "B2bOrderTerms",
+    "B2bPriceItem",
+    "PaymentTerms",
+    "PricingMode",
     "Customer",
     "Ingredient",
     "IngredientKind",

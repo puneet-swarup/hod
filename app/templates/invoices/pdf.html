@@ -61,6 +61,8 @@
         <p><strong>{{ invoice.billed_to_name }}</strong></p>
         <p>{{ invoice.billed_to_phone }}{% if invoice.billed_to_email %} · {{ invoice.billed_to_email }}{% endif %}</p>
         {% if invoice.billed_to_address %}<p>{{ invoice.billed_to_address }}</p>{% endif %}
+        {% if invoice.billed_to_gstin %}<p>GSTIN: {{ invoice.billed_to_gstin }}</p>{% endif %}
+        {% if invoice.po_reference %}<p>PO ref: {{ invoice.po_reference }}</p>{% endif %}
     </div>
     {% if invoice.delivery_type == 'DELIVERY' and invoice.delivery_address %}
     <div class="info-box deliver-to">

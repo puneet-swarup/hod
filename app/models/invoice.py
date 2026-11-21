@@ -37,6 +37,9 @@ class Invoice(Base):
     billed_to_phone: Mapped[str] = mapped_column(String(20), nullable=False, default="")
     billed_to_email: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     billed_to_address: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # B2B: the partner's GSTIN and their purchase-order reference.
+    billed_to_gstin: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    po_reference: Mapped[str] = mapped_column(String(60), nullable=False, default="")
 
     order_number: Mapped[str] = mapped_column(String(20), nullable=False, default="")
     order_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

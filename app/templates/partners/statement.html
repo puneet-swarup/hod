@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Statement — {{ account.name }} — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-4xl mx-auto">
+
+    <div class="flex justify-between items-start flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">Statement</h1>
+            <p class="text-sm text-base-content/60">{{ account.name }} · <span class="font-mono">{{ account.code }}</span></p>
+        </div>
+        <div class="flex gap-2">
+            <a href="/b2b/{{ account.id }}/statement.csv" class="btn btn-outline btn-sm">Download CSV</a>
+            <a href="/b2b/{{ account.id }}" class="btn btn-ghost btn-sm">← Partner</a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3">
+        <div class="card bg-base-100 shadow-sm"><div class="card-body p-4">
+            <p class="text-xs text-base-content/50 uppercase">Billed</p>
+            <p class="text-lg font-extrabold font-mono">{{ data.billed|money }}</p>
+        </div></div>
+        <div class="card bg-base-100 shadow-sm"><div class="card-body p-4">
+            <p class="text-xs text-base-content/50 uppercase">Received</p>
+            <p class="text-lg font-extrabold font-mono text-success">{{ data.received|money }}</p>
+        </div></div>
+        <div class="card bg-base-100 shadow-sm"><div class="card-body p-4">
+            <p class="text-xs text-base-content/50 uppercase">Outstanding</p>
+            <p class="text-lg font-extrabold font-mono {% if data.outstanding > 0 %}text-error{% endif %}">
+                {{ data.outstanding|money }}
+            </p>
+        </div></div>
+    </div>
+
+    {% if data.credit.has_limit %}
+    <div class="alert {% if data.credit.over_limit %}alert-error{% else %}alert-info{% endif %} text-sm py-2">
+        <span>
+            Credit limit {{ data.credit.limit|money }} · outstanding {{ data.outstanding|money }}
+            {% if data.credit.over_limit %} — over limit{% endif %}
+        </span>
+    </div>
+    {% endif %}
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table table-sm">
+                <thead>
+                    <tr class="text-amber-900">
+                        <th>Date</th>
+                        <th>Order</th>
+                        <th class="hidden sm:table-cell">PO ref</th>
+                        <th>Status</th>
+                        <th class="text-right">Total</th>
+                        <th class="text-right hidden sm:table-cell">Paid</th>
+                        <th class="text-right">Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data.rows %}
+                    {% set o = row.order %}
+                    <tr class="hover">
+                        <td class="text-xs font-mono whitespace-nowrap">{{ o.order_date.strftime('%d %b %Y') }}</td>
+                        <td><a href="/orders/{{ o.id }}" class="font-mono text-sm hover:underline">{{ o.order_number }}</a></td>
+                        <td class="hidden sm:table-cell text-xs font-mono text-base-content/60">{{ row.po or '—' }}</td>
+                        <td><span class="badge {{ o.status_badge_class }} badge-sm">{{ o.status.value.replace('_',' ') }}</span></td>
+                        <td class="text-right font-mono text-sm">{{ row.total|money }}</td>
+                        <td class="text-right hidden sm:table-cell font-mono text-sm text-base-content/60">{{ row.paid|money }}</td>
+                        <td class="text-right font-mono text-sm {% if row.balance > 0 %}text-error{% endif %}">{{ row.balance|money }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center text-sm text-base-content/50 py-6">No orders yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -84,11 +84,22 @@
                                 </a>
                             </td>
                             <td>
+                                {% if order.is_b2b and order.account %}
+                                <div class="font-medium text-sm">
+                                    {{ order.account.name }}
+                                    <span class="badge badge-primary badge-xs ml-1">B2B</span>
+                                </div>
+                                <a href="tel:{{ order.account.phone or order.customer.phone }}"
+                                   class="text-xs text-base-content/60 font-mono hover:underline">
+                                    {{ order.account.phone or order.customer.phone }}
+                                </a>
+                                {% else %}
                                 <div class="font-medium text-sm">{{ order.customer.name }}</div>
                                 <a href="tel:{{ order.customer.phone }}"
                                    class="text-xs text-base-content/60 font-mono hover:underline">
                                     {{ order.customer.phone }}
                                 </a>
+                                {% endif %}
                             </td>
                             <td class="hidden sm:table-cell text-sm">
                                 {% if order.delivery_type == 'DELIVERY' %}

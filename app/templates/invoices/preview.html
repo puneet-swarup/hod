@@ -56,6 +56,12 @@
                     {% if invoice.billed_to_address %}
                     <p class="text-sm text-base-content/60 mt-1 whitespace-pre-line">{{ invoice.billed_to_address }}</p>
                     {% endif %}
+                    {% if invoice.billed_to_gstin %}
+                    <p class="text-xs font-mono text-base-content/60 mt-1">GSTIN: {{ invoice.billed_to_gstin }}</p>
+                    {% endif %}
+                    {% if invoice.po_reference %}
+                    <p class="text-xs text-base-content/60 mt-1">PO ref: {{ invoice.po_reference }}</p>
+                    {% endif %}
                 </div>
 
                 {% if invoice.delivery_type == 'DELIVERY' and invoice.delivery_address %}

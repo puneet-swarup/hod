@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Partners — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <div class="flex justify-between items-center flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">Partners</h1>
+            <p class="text-sm text-base-content/60">Shops and franchisees the bakery supplies</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="/b2b/?all={{ 0 if show_inactive else 1 }}" class="btn btn-ghost btn-sm">
+                {{ "Active only" if show_inactive else "Show inactive" }}
+            </a>
+            <a href="/b2b/new" class="btn btn-amber btn-sm font-semibold">+ Add Partner</a>
+        </div>
+    </div>
+
+    {% if cards %}
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {% for row in cards %}
+        {% set a = row.account %}
+        {% set c = row.credit %}
+        <a href="/b2b/{{ a.id }}"
+           class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow {% if not a.is_active %}opacity-60{% endif %}">
+            <div class="card-body p-4 space-y-2">
+                <div class="flex justify-between items-start gap-2">
+                    <div class="min-w-0">
+                        <p class="font-bold text-amber-900 truncate">{{ a.name }}</p>
+                        <p class="text-xs font-mono text-base-content/50">{{ a.code }}</p>
+                    </div>
+                    <span class="badge badge-ghost badge-sm">{{ a.kind_label }}</span>
+                </div>
+
+                <div class="flex flex-wrap gap-1 text-xs">
+                    <span class="badge badge-outline badge-sm">{{ a.credit_days }}d credit</span>
+                    <span class="badge badge-outline badge-sm">cut-off {{ a.order_cutoff }}</span>
+                    {% if not a.is_active %}
+                    <span class="badge badge-error badge-sm">Inactive</span>
+                    {% endif %}
+                </div>
+
+                <div class="flex justify-between items-end pt-1">
+                    <div>
+                        <p class="text-xs text-base-content/50">Outstanding</p>
+                        <p class="font-mono font-semibold {% if c.over_limit %}text-error{% endif %}">
+                            {{ c.outstanding|money }}
+                        </p>
+                    </div>
+                    {% if c.has_limit %}
+                    <div class="text-right">
+                        <p class="text-xs text-base-content/50">Limit</p>
+                        <p class="font-mono text-xs {% if c.over_limit %}text-error font-semibold{% endif %}">
+                            {{ c.limit|money }}
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <p class="text-5xl mb-4">🏪</p>
+            <h2 class="text-xl font-bold">No partners yet</h2>
+            <p class="text-base-content/60 mt-1 max-w-md mx-auto">
+                Add a shop or franchisee to set their prices, credit terms and dispatch days.
+                Retail ordering is unaffected.
+            </p>
+            <div class="mt-4">
+                <a href="/b2b/new" class="btn btn-primary btn-sm">Add your first partner</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

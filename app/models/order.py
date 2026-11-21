@@ -15,6 +15,7 @@ from app.database import Base
 from app.utils.time import utcnow
 
 if TYPE_CHECKING:
+    from app.models.b2b import B2bAccount, B2bOrderTerms
     from app.models.customer import Customer
     from app.models.payment import Payment
     from app.models.product import Product
@@ -49,6 +50,16 @@ class Order(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     order_number: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
     customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), nullable=False)
+
+    # Sales channel. 'RETAIL' for every order that existed before the B2B
+    # module; 'B2B' when a partner account is attached. Defaulted in the
+    # database too, so an old row is valid the moment the column appears.
+    channel: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="RETAIL", server_default="RETAIL"
+    )
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("b2b_accounts.id"), nullable=True
+    )
 
     status: Mapped[OrderStatus] = mapped_column(
         SAEnum(OrderStatus), nullable=False, default=OrderStatus.INQUIRY
@@ -89,6 +100,13 @@ class Order(Base):
         cascade="all, delete-orphan",
         order_by="Payment.received_at",
     )
+    account: Mapped[B2bAccount | None] = relationship(lazy="joined")
+    b2b_terms: Mapped[B2bOrderTerms | None] = relationship(
+        back_populates="order",
+        uselist=False,
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         Index("ix_orders_status", "status"),
@@ -96,9 +114,24 @@ class Order(Base):
         Index("ix_orders_customer_id", "customer_id"),
         Index("ix_orders_order_date", "order_date"),
         Index("ix_orders_fulfillment_date", "fulfillment_date"),
+        Index("ix_orders_channel", "channel"),
+        Index("ix_orders_account_id", "account_id"),
     )
 
     # ---------- Computed helpers ----------
+
+    @property
+    def is_b2b(self) -> bool:
+        return self.channel == "B2B"
+
+    @property
+    def channel_label(self) -> str:
+        return {"RETAIL": "Retail", "B2B": "B2B", "QR": "QR"}.get(self.channel, self.channel)
+
+    @property
+    def partner_name(self) -> str | None:
+        """The shop this order is for, when it is a B2B order."""
+        return self.account.name if self.account else None
 
     @property
     def payment_state(self) -> str:

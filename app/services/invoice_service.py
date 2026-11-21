@@ -67,6 +67,20 @@ def _build_invoice(db: Session, order: Order) -> Invoice:
         None,
     )
 
+    # A B2B order is billed to the partner: their name, their GSTIN and
+    # their purchase-order reference, so the invoice can be filed by them.
+    partner = order.account if order.is_b2b else None
+    billed_name = partner.name if partner else customer.name
+    billed_phone = (partner.phone or customer.phone) if partner else customer.phone
+    billed_email = (partner.email or customer.email or "") if partner else (customer.email or "")
+    billed_address = (
+        (partner.billing_address or (default_addr.line if default_addr else ""))
+        if partner
+        else (default_addr.line if default_addr else "")
+    )
+    billed_gstin = (partner.gstin or "") if partner else ""
+    po_reference = (order.b2b_terms.po_reference or "") if order.b2b_terms else ""
+
     items_snapshot = []
     gst_total = Decimal("0.00")
     subtotal = Decimal("0.00")
@@ -96,10 +110,12 @@ def _build_invoice(db: Session, order: Order) -> Invoice:
         business_email=settings.email,
         business_gstin=settings.gstin,
         business_fssai=settings.fssai_number,
-        billed_to_name=customer.name,
-        billed_to_phone=customer.phone,
-        billed_to_email=customer.email or "",
-        billed_to_address=default_addr.line if default_addr else "",
+        billed_to_name=billed_name,
+        billed_to_phone=billed_phone,
+        billed_to_email=billed_email,
+        billed_to_address=billed_address,
+        billed_to_gstin=billed_gstin,
+        po_reference=po_reference,
         order_number=order.order_number,
         order_date=order.order_date,
         fulfillment_date=order.fulfillment_date,
@@ -192,6 +208,10 @@ def generate_pdf(db: Session, order_id: int) -> str:
         pdf.cell(0, 5, invoice.billed_to_email, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     if invoice.billed_to_address:
         pdf.cell(0, 5, invoice.billed_to_address, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    if invoice.billed_to_gstin:
+        pdf.cell(0, 5, f"GSTIN: {invoice.billed_to_gstin}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    if invoice.po_reference:
+        pdf.cell(0, 5, f"PO ref: {invoice.po_reference}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(3)
 
     # --- Fulfillment ---

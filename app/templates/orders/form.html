@@ -67,12 +67,34 @@
 
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body space-y-3">
-                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer</h2>
+                <div class="flex justify-between items-center flex-wrap gap-2">
+                    <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer</h2>
+                    {% if not is_edit %}
+                    <div class="join" id="channel-toggle">
+                        <button type="button" data-channel="RETAIL"
+                                class="btn btn-xs join-item {% if not preset_account %}btn-active{% endif %}">Retail</button>
+                        <button type="button" data-channel="B2B"
+                                class="btn btn-xs join-item {% if preset_account %}btn-active{% endif %}">B2B partner</button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {% set start_channel = order.channel if is_edit else ('B2B' if preset_account else 'RETAIL') %}
+                <input type="hidden" name="channel" id="channel" value="{{ start_channel }}" />
+                <input type="hidden" name="account_id" id="account_id"
+                       value="{{ order.account_id if is_edit and order.account_id else (preset_account.id if preset_account else '') }}" />
 
                 {% if is_edit %}
                     <div class="p-3 rounded-lg bg-base-200 border border-base-300">
+                        {% if order.is_b2b and order.account %}
+                        <p class="font-semibold">{{ order.account.name }}</p>
+                        <p class="text-sm text-base-content/60 font-mono">
+                            {{ order.account.code }} · {{ order.account.kind_label }}
+                        </p>
+                        {% else %}
                         <p class="font-semibold">{{ order.customer.name }}</p>
                         <p class="text-sm text-base-content/60">{{ order.customer.phone }}</p>
+                        {% endif %}
                         <p class="text-xs text-base-content/50 mt-1">
                             Customer cannot be changed. Cancel and recreate if needed.
                         </p>
@@ -80,7 +102,30 @@
                 {% else %}
                     {% set selected_id = (form_data.customer_id if form_data and form_data.customer_id else preset_customer_id) %}
                     {% set preset_c = (customers | selectattr('id', 'equalto', selected_id) | list | first) if selected_id else None %}
-                    <div class="flex flex-col sm:flex-row gap-2">
+
+                    <!-- B2B partner picker (hidden until the toggle says B2B) -->
+                    <div id="b2b-block" class="hidden space-y-2">
+                        <div class="relative">
+                            <input type="text" id="partner-search" autocomplete="off" name="q"
+                                   class="input input-bordered w-full"
+                                   value="{{ preset_account.name if preset_account else '' }}"
+                                   {% if preset_account %}data-selected-name="{{ preset_account.name }}"{% endif %}
+                                   placeholder="Type a shop name or code to search…"
+                                   hx-get="/b2b/search"
+                                   hx-trigger="keyup changed delay:300ms, search"
+                                   hx-target="#partner-results"
+                                   hx-swap="innerHTML" />
+                            <div id="partner-results"
+                                 class="absolute z-30 mt-1 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-64 overflow-y-auto hidden"></div>
+                        </div>
+                        <p id="partner-selected" class="text-xs text-base-content/60">
+                            {%- if preset_account -%}
+                            Selected: {{ preset_account.name }} ({{ preset_account.code }}) · {{ preset_account.credit_days }}d credit
+                            {%- endif -%}
+                        </p>
+                    </div>
+
+                    <div id="retail-block" class="flex flex-col sm:flex-row gap-2">
                         <div class="relative w-full sm:flex-1 sm:min-w-0">
                             <input type="hidden" name="customer_id" id="customer_id"
                                    value="{{ selected_id if selected_id else '' }}"
@@ -107,6 +152,39 @@
                         </button>
                     </div>
                 {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm hidden" id="b2b-terms-card">
+            <div class="card-body space-y-3">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Partner terms</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">PO reference</span></label>
+                        <input type="text" name="po_reference" id="po_reference"
+                               value="{{ order.b2b_terms.po_reference if is_edit and order.b2b_terms and order.b2b_terms.po_reference else (form_data.po_reference if form_data and form_data.po_reference else '') }}"
+                               class="input input-bordered w-full font-mono"
+                               placeholder="Their PO number" />
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Payment terms</span></label>
+                        {% set pt = (order.b2b_terms.payment_terms.value if is_edit and order.b2b_terms else (form_data.payment_terms if form_data and form_data.payment_terms else 'CREDIT')) %}
+                        <select name="payment_terms" id="payment_terms" class="select select-bordered w-full">
+                            <option value="CREDIT" {% if pt == 'CREDIT' %}selected{% endif %}>Credit</option>
+                            <option value="ADVANCE" {% if pt == 'ADVANCE' %}selected{% endif %}>Advance</option>
+                            <option value="COD" {% if pt == 'COD' %}selected{% endif %}>Cash on delivery</option>
+                        </select>
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Dispatch date</span></label>
+                        <input type="date" name="dispatch_date" id="dispatch_date"
+                               value="{{ order.b2b_terms.dispatch_date.isoformat() if is_edit and order.b2b_terms and order.b2b_terms.dispatch_date else '' }}"
+                               class="input input-bordered w-full" />
+                    </div>
+                </div>
+                <p class="text-xs text-base-content/60">
+                    Prices come from the partner's contract. Commercial checks only warn — nothing is blocked.
+                </p>
             </div>
         </div>
 
@@ -172,6 +250,12 @@
                             {% set p = (products | selectattr('id', 'equalto', item.product_id) | list | first) %}
                             {{ item_row(item.product_id, item.quantity, product_label(p) if p else '') }}
                         {% endfor %}
+                    {% elif form_data and form_data.items %}
+                        {# Rejected submit: rebuild the rows the user had entered. #}
+                        {% for item in form_data.items %}
+                            {% set p = (products | selectattr('id', 'equalto', item.product_id) | list | first) %}
+                            {{ item_row(item.product_id, item.quantity, product_label(p) if p else '') }}
+                        {% endfor %}
                     {% else %}
                         {{ item_row() }}
                     {% endif %}
@@ -180,6 +264,14 @@
                 <div>
                     <button type="button" class="btn btn-sm btn-outline" onclick="addItemRow()">+ Add item</button>
                 </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm hidden" id="b2b-summary">
+            <div class="card-body space-y-2">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Partner pricing</h2>
+                <div id="b2b-warnings" class="space-y-1"></div>
+                <div id="b2b-totals" class="space-y-1 pt-1 border-t border-base-200"></div>
             </div>
         </div>
 
@@ -300,6 +392,179 @@ function addItemRow() {
     // The clone carries hx-* attributes but htmx has not seen it yet.
     if (window.htmx) window.htmx.process(clone);
 }
+
+/* B2B partner mode: channel toggle, partner type-ahead, live quote. */
+(function () {
+    const channel = document.getElementById('channel');
+    if (!channel) return;
+
+    const accountId = document.getElementById('account_id');
+    const customerId = document.getElementById('customer_id');
+    const toggle = document.getElementById('channel-toggle');
+    const retailBlock = document.getElementById('retail-block');
+    const b2bBlock = document.getElementById('b2b-block');
+    const partnerSearch = document.getElementById('partner-search');
+    const partnerResults = document.getElementById('partner-results');
+    const partnerSelected = document.getElementById('partner-selected');
+    const termsCard = document.getElementById('b2b-terms-card');
+    const summary = document.getElementById('b2b-summary');
+    const warningsBox = document.getElementById('b2b-warnings');
+    const totalsBox = document.getElementById('b2b-totals');
+
+    function rupees(v) {
+        return '\u20b9' + Number(v).toFixed(2);
+    }
+
+    function collectItems() {
+        const parts = [];
+        document.querySelectorAll('.item-row').forEach(function (row) {
+            const pid = row.querySelector('.product-id');
+            const qty = row.querySelector('input[name="quantity"]');
+            if (pid && pid.value && qty && qty.value) {
+                parts.push(pid.value + ':' + qty.value);
+            }
+        });
+        return parts.join(',');
+    }
+
+    function renderQuote(data) {
+        const rows = document.querySelectorAll('.item-row');
+        (data.lines || []).forEach(function (line, idx) {
+            const row = rows[idx];
+            if (!row) return;
+            const hint = row.querySelector('.product-hint');
+            if (hint) {
+                hint.textContent = rupees(line.unit_price) + ' \u00d7 ' + line.quantity
+                    + ' \u00b7 ' + line.price_label;
+            }
+        });
+        if (warningsBox) {
+            warningsBox.innerHTML = (data.warnings || []).map(function (w) {
+                return '<div class="alert alert-warning text-sm py-2"><span>' + w + '</span></div>';
+            }).join('');
+        }
+        if (totalsBox) {
+            totalsBox.innerHTML =
+                '<div class="flex justify-between text-sm"><span>Subtotal</span>' +
+                '<span class="font-mono">' + rupees(data.subtotal) + '</span></div>' +
+                '<div class="flex justify-between text-sm"><span>GST</span>' +
+                '<span class="font-mono">' + rupees(data.gst_total) + '</span></div>' +
+                '<div class="flex justify-between font-bold"><span>Total</span>' +
+                '<span class="font-mono">' + rupees(data.total) + '</span></div>';
+        }
+    }
+
+    let quoteTimer = null;
+
+    async function refreshQuote() {
+        if (!summary || !accountId || channel.value !== 'B2B' || !accountId.value) return;
+        const items = collectItems();
+        if (!items) {
+            if (warningsBox) warningsBox.innerHTML = '';
+            if (totalsBox) {
+                totalsBox.innerHTML = '<p class="text-sm text-base-content/50">Add an item to see partner pricing.</p>';
+            }
+            return;
+        }
+        const fulfillmentInput = document.getElementById('fulfillment_date');
+        const fulfillment = fulfillmentInput ? fulfillmentInput.value : '';
+        const url = '/b2b/' + accountId.value + '/quote?items=' + encodeURIComponent(items)
+            + '&fulfillment=' + encodeURIComponent(fulfillment);
+        try {
+            const response = await fetch(url, { headers: { Accept: 'application/json' } });
+            if (!response.ok) return;
+            renderQuote(await response.json());
+        } catch (err) {
+            // Keep the last good quote on screen; the server re-prices on save.
+        }
+    }
+
+    function scheduleQuote() {
+        clearTimeout(quoteTimer);
+        quoteTimer = setTimeout(refreshQuote, 350);
+    }
+
+    function setChannel(mode) {
+        channel.value = mode;
+        if (toggle) {
+            toggle.querySelectorAll('button[data-channel]').forEach(function (btn) {
+                btn.classList.toggle('btn-active', btn.dataset.channel === mode);
+            });
+        }
+        if (retailBlock) retailBlock.classList.toggle('hidden', mode === 'B2B');
+        if (b2bBlock) b2bBlock.classList.toggle('hidden', mode !== 'B2B');
+        if (termsCard) termsCard.classList.toggle('hidden', mode !== 'B2B');
+        if (summary) summary.classList.toggle('hidden', mode !== 'B2B' || !accountId.value);
+        if (mode !== 'B2B' && accountId) {
+            accountId.value = '';
+            if (partnerSearch) {
+                partnerSearch.value = '';
+                delete partnerSearch.dataset.selectedName;
+            }
+            if (partnerSelected) partnerSelected.textContent = '';
+            document.querySelectorAll('.product-hint').forEach(function (hint) {
+                hint.textContent = '';
+            });
+        }
+        scheduleQuote();
+    }
+
+    if (toggle) {
+        toggle.addEventListener('click', function (e) {
+            const btn = e.target.closest('button[data-channel]');
+            if (btn) setChannel(btn.dataset.channel);
+        });
+    }
+
+    if (partnerResults) {
+        partnerResults.addEventListener('click', function (e) {
+            const row = e.target.closest('.partner-result');
+            if (!row) return;
+            accountId.value = row.dataset.id || '';
+            if (customerId) customerId.value = row.dataset.customerId || '';
+            partnerSearch.value = row.dataset.name || '';
+            partnerSearch.dataset.selectedName = row.dataset.name || '';
+            if (partnerSelected) {
+                partnerSelected.textContent = 'Selected: ' + row.dataset.name
+                    + ' (' + row.dataset.code + ') \u00b7 ' + row.dataset.creditDays + 'd credit';
+            }
+            partnerResults.classList.add('hidden');
+            partnerResults.innerHTML = '';
+            if (summary) summary.classList.remove('hidden');
+            refreshQuote();
+        });
+
+        partnerResults.addEventListener('htmx:afterSwap', function () {
+            partnerResults.classList.toggle('hidden', partnerResults.textContent.trim().length === 0);
+        });
+
+        partnerSearch.addEventListener('input', function () {
+            const chosen = partnerSearch.dataset.selectedName || '';
+            if (accountId.value && chosen && partnerSearch.value !== chosen) {
+                accountId.value = '';
+                if (customerId) customerId.value = '';
+                delete partnerSearch.dataset.selectedName;
+                if (partnerSelected) partnerSelected.textContent = '';
+                if (summary) summary.classList.add('hidden');
+            }
+        });
+    }
+
+    // Re-quote whenever the basket changes.
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('.product-result')) scheduleQuote();
+    });
+    document.addEventListener('input', function (e) {
+        if (e.target.closest('.product-search') || e.target.matches('input[name="quantity"]')) {
+            scheduleQuote();
+        }
+    });
+    const fulfillmentField = document.getElementById('fulfillment_date');
+    if (fulfillmentField) fulfillmentField.addEventListener('change', scheduleQuote);
+
+    // Initial state: retail unless this order is already a B2B order.
+    setChannel(channel.value === 'B2B' ? 'B2B' : 'RETAIL');
+})();
 
 /* Product type-ahead. Runs for every item row, in create and edit mode. */
 (function () {

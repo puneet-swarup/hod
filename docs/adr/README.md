@@ -27,3 +27,5 @@ We use the **Nygard template**: Status → Context → Decision → Consequences
 | [0013](0013-navbar-only-navigation.md) | Navbar-Only Navigation (No Drawer) | Accepted | 2026-09-22 |
 | [0014](0014-local-time-over-utc.md) | Local Time (IST) Over UTC | Superseded by 0015 | 2026-09-22 |
 | [0015](0015-store-utc-display-ist.md) | Store UTC, Display in the Business Timezone | Accepted | 2026-11-21 |
+| [0016](0016-b2b-channel-additive-layer.md) | B2B Channel as an Additive Layer Over Retail Orders | Accepted | 2026-11-21 |
+| [0017](0017-order-date-is-a-local-date.md) | `order_date` Is a Local Calendar Date | Accepted | 2026-11-21 |

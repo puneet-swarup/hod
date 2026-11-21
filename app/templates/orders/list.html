@@ -44,8 +44,11 @@
                         <a href="/orders/{{ order.id }}" class="font-mono font-bold text-amber-900 hover:underline">
                             {{ order.order_number }}
                         </a>
+                        {% if order.is_b2b %}
+                        <span class="badge badge-primary badge-xs ml-1 align-middle">B2B</span>
+                        {% endif %}
                         <p class="text-sm text-base-content/60 truncate">
-                            {{ order.customer.name }} · {{ order.customer.phone }}
+                            {% if order.is_b2b and order.account %}{{ order.account.name }}{% else %}{{ order.customer.name }}{% endif %} · {{ order.customer.phone }}
                             {% if order.delivery_type == 'DELIVERY' %} · 🚚{% else %} · 🏠 Pickup{% endif %}
                         </p>
                         <p class="text-xs text-base-content/50 mt-1">

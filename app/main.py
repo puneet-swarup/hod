@@ -73,9 +73,39 @@ def _fmt_date(value) -> str:
     return _fmt_datetime(value, "%d %b %Y")
 
 
+def _fmt_local_datetime(value, fmt: str = "%d %b %Y, %H:%M") -> str:
+    """Format a naive LOCAL datetime (business wall clock) — no conversion.
+
+    Used for values the user typed or chose (order date, fulfillment date),
+    which already carry local intent. Running them through `dt` would shift
+    them by +5h30m.
+    """
+    if value is None:
+        return ""
+    return value.strftime(fmt)
+
+
+def _fmt_local_date(value) -> str:
+    return _fmt_local_datetime(value, "%d %b %Y")
+
+
+def _fmt_pct(value) -> str:
+    """30.00 -> '30', 12.50 -> '12.5'. Percentages read badly with trailing zeros."""
+    if value is None:
+        return ""
+    try:
+        text = f"{float(value):.2f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return str(value)
+    return text or "0"
+
+
 templates.env.filters["money"] = _fmt_money
 templates.env.filters["dt"] = _fmt_datetime
 templates.env.filters["d"] = _fmt_date
+templates.env.filters["ldt"] = _fmt_local_datetime
+templates.env.filters["ld"] = _fmt_local_date
+templates.env.filters["pct"] = _fmt_pct
 
 app.state.templates = templates
 app.state.settings = settings
@@ -85,6 +115,7 @@ app.state.settings = settings
 # Imported after app.state is set; routers read request.app.state at call time.
 from app.routers import (  # noqa: E402
     audit,
+    b2b,
     customers,
     dashboard,
     export,
@@ -101,6 +132,7 @@ app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(today.router, tags=["today"])
 app.include_router(orders.router, prefix="/orders", tags=["orders"])
 app.include_router(customers.router, prefix="/customers", tags=["customers"])
+app.include_router(b2b.router, prefix="/b2b", tags=["b2b"])
 app.include_router(products.router, prefix="/products", tags=["products"])
 app.include_router(ingredients.router, prefix="/ingredients", tags=["ingredients"])
 app.include_router(invoices.router, prefix="/invoices", tags=["invoices"])

@@ -33,8 +33,19 @@ def next_invoice_number(db: Session) -> str:
     return _next(db, "INVOICE")
 
 
-def _next(db: Session, kind: str) -> str:
-    prefix = _prefix(kind)
+def next_b2b_order_number(db: Session) -> str:
+    """B2B orders get their own series, so a partner's paperwork is separate.
+
+    Format: HOD-B2B-2026-0001 (fits orders.order_number VARCHAR(20)).
+    Retail numbering is untouched — existing numbers never shift.
+    """
+    settings = get_settings()
+    seq = _bump(db, _prefix("B2BORDER"))
+    return f"{settings.invoice_prefix}-B2B-{business_now().year}-{seq:04d}"
+
+
+def _bump(db: Session, prefix: str) -> int:
+    """Increment and return the next sequence value for `prefix`."""
     row = db.execute(
         select(NumberSequence).where(NumberSequence.prefix == prefix).with_for_update()
     ).scalar_one_or_none()
@@ -46,10 +57,13 @@ def _next(db: Session, kind: str) -> str:
 
     row.last_value += 1
     db.flush()
+    return row.last_value
 
+
+def _next(db: Session, kind: str) -> str:
     # Format: HOD-2026-0001 (kind is embedded in prefix but not in the
     # human-readable number, matching v0.1 behaviour).
-    seq = row.last_value
+    seq = _bump(db, _prefix(kind))
     settings = get_settings()
     year = business_now().year
     return f"{settings.invoice_prefix}-{year}-{seq:04d}"
