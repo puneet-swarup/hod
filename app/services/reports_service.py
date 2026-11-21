@@ -133,13 +133,42 @@ def build_report(db: Session, year: int, month: int) -> dict:
     total_outstanding = Decimal("0.00")
     total_cogs = Decimal("0.00")
 
+    # Per-channel totals. A B2B invoice has a different GST story (the buyer
+    # claims input credit) and a different payment rhythm, so revenue that
+    # mixes the two channels cannot be filed or acted on.
+    channels: dict[str, dict] = {}
+
+    def _channel_row(key: str) -> dict:
+        return channels.setdefault(
+            key,
+            {
+                "channel": key,
+                "orders": 0,
+                "revenue": Decimal("0.00"),
+                "gst": Decimal("0.00"),
+                "received": Decimal("0.00"),
+                "outstanding": Decimal("0.00"),
+                "cogs": Decimal("0.00"),
+            },
+        )
+
     for o in active_orders:
+        o_cogs = cogs_by_order.get(o.id, Decimal("0.00"))
+        o_gst = sum((money(it.gst_amount) for it in o.items), Decimal("0.00"))
+
         total_revenue += money(o.total_amount)
         total_received += money(o.advance_paid)
         total_outstanding += money(o.balance_due)
-        total_cogs += cogs_by_order.get(o.id, Decimal("0.00"))
-        for it in o.items:
-            total_gst += money(it.gst_amount)
+        total_cogs += o_cogs
+        total_gst += o_gst
+
+        row = _channel_row(o.channel or "RETAIL")
+        row["orders"] += 1
+        row["revenue"] += money(o.total_amount)
+        row["gst"] += o_gst
+        row["received"] += money(o.advance_paid)
+        row["outstanding"] += money(o.balance_due)
+        row["cogs"] += o_cogs
 
     total_revenue = money(total_revenue)
     total_gst = money(total_gst)
@@ -205,6 +234,11 @@ def build_report(db: Session, year: int, month: int) -> dict:
             {
                 "order_number": o.order_number,
                 "order_date": o.order_date,
+                "channel": o.channel or "RETAIL",
+                "partner_name": o.account.name if o.account else "",
+                "po_reference": (
+                    o.b2b_terms.po_reference if o.b2b_terms and o.b2b_terms.po_reference else ""
+                ),
                 "customer_name": o.customer.name if o.customer else "",
                 "customer_phone": o.customer.phone if o.customer else "",
                 "status": o.status.value,
@@ -217,6 +251,37 @@ def build_report(db: Session, year: int, month: int) -> dict:
                 "margin": money(o.total_amount - o_cogs),
             }
         )
+
+    # Per-partner rollup for the month — the number you actually chase.
+    partners: dict[int, dict] = {}
+    for o in active_orders:
+        if not o.account_id:
+            continue
+        entry = partners.setdefault(
+            o.account_id,
+            {
+                "code": o.account.code if o.account else "",
+                "name": o.account.name if o.account else "(deleted)",
+                "orders": 0,
+                "revenue": Decimal("0.00"),
+                "received": Decimal("0.00"),
+                "outstanding": Decimal("0.00"),
+            },
+        )
+        entry["orders"] += 1
+        entry["revenue"] += money(o.total_amount)
+        entry["received"] += money(o.advance_paid)
+        entry["outstanding"] += money(o.balance_due)
+
+    by_partner = sorted(partners.values(), key=lambda r: r["revenue"], reverse=True)
+
+    channel_rows = []
+    for key in ("RETAIL", "B2B", "QR"):
+        if key in channels:
+            row = channels[key]
+            row["margin"] = money(row["revenue"] - row["cogs"])
+            row["label"] = {"RETAIL": "Retail", "B2B": "B2B partners", "QR": "QR self-service"}[key]
+            channel_rows.append(row)
 
     return {
         "year": year,
@@ -238,6 +303,14 @@ def build_report(db: Session, year: int, month: int) -> dict:
         ),
         "by_status": by_status,
         "by_payment": by_payment,
+        "by_channel": channel_rows,
+        "by_partner": by_partner,
+        "b2b_revenue": money(
+            next((r["revenue"] for r in channel_rows if r["channel"] == "B2B"), Decimal("0.00"))
+        ),
+        "b2b_outstanding": money(
+            next((r["outstanding"] for r in channel_rows if r["channel"] == "B2B"), Decimal("0.00"))
+        ),
         "top_products": top_products,
         "itemized": itemized,
     }
@@ -280,6 +353,39 @@ def render_csv(report: dict) -> str:
         w.writerow([state, count])
     w.writerow([])
 
+    w.writerow(["Revenue by channel"])
+    w.writerow(["Channel", "Orders", "Revenue", "GST", "COGS", "Margin", "Received", "Outstanding"])
+    for row in report["by_channel"]:
+        w.writerow(
+            [
+                row["label"],
+                row["orders"],
+                f"{row['revenue']:.2f}",
+                f"{row['gst']:.2f}",
+                f"{row['cogs']:.2f}",
+                f"{row['margin']:.2f}",
+                f"{row['received']:.2f}",
+                f"{row['outstanding']:.2f}",
+            ]
+        )
+    w.writerow([])
+
+    if report["by_partner"]:
+        w.writerow(["B2B partners this month"])
+        w.writerow(["Code", "Partner", "Orders", "Revenue", "Received", "Outstanding"])
+        for row in report["by_partner"]:
+            w.writerow(
+                [
+                    row["code"],
+                    row["name"],
+                    row["orders"],
+                    f"{row['revenue']:.2f}",
+                    f"{row['received']:.2f}",
+                    f"{row['outstanding']:.2f}",
+                ]
+            )
+        w.writerow([])
+
     w.writerow(["Top products"])
     w.writerow(
         [
@@ -311,6 +417,9 @@ def render_csv(report: dict) -> str:
         [
             "Order Number",
             "Date",
+            "Channel",
+            "Partner",
+            "PO ref",
             "Customer",
             "Phone",
             "Status",
@@ -328,6 +437,9 @@ def render_csv(report: dict) -> str:
             [
                 row["order_number"],
                 row["order_date"].strftime("%Y-%m-%d %H:%M"),
+                row["channel"],
+                row["partner_name"],
+                row["po_reference"],
                 row["customer_name"],
                 row["customer_phone"],
                 row["status"],
@@ -438,6 +550,55 @@ def render_pdf(report: dict, output_path: Path) -> None:
         pdf.cell(100, 6, label, border=0)
         pdf.cell(0, 6, value, border=0, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(4)
+
+    # Channel split — retail vs wholesale vs self-service
+    if len(report["by_channel"]) > 1 or report["by_partner"]:
+        pdf.set_font(font, "B", 11)
+        pdf.cell(0, 7, "Revenue by channel", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        pdf.set_font(font, "B", 8)
+        pdf.cell(45, 6, "Channel", border=1)
+        pdf.cell(18, 6, "Orders", border=1, align="R")
+        pdf.cell(30, 6, "Revenue", border=1, align="R")
+        pdf.cell(25, 6, "GST", border=1, align="R")
+        pdf.cell(28, 6, "Margin", border=1, align="R")
+        pdf.cell(0, 6, "Outstanding", border=1, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        pdf.set_font(font, "", 8)
+        for row in report["by_channel"]:
+            pdf.cell(45, 6, row["label"], border=1)
+            pdf.cell(18, 6, str(row["orders"]), border=1, align="R")
+            pdf.cell(30, 6, money_str(row["revenue"]), border=1, align="R")
+            pdf.cell(25, 6, money_str(row["gst"]), border=1, align="R")
+            pdf.cell(28, 6, money_str(row["margin"]), border=1, align="R")
+            pdf.cell(0, 6, money_str(row["outstanding"]), border=1, align="R",
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(4)
+
+    # B2B partners this month
+    if report["by_partner"]:
+        pdf.set_font(font, "B", 11)
+        pdf.cell(0, 7, "B2B partners this month", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        pdf.set_font(font, "B", 8)
+        pdf.cell(30, 6, "Code", border=1)
+        pdf.cell(65, 6, "Partner", border=1)
+        pdf.cell(15, 6, "Orders", border=1, align="R")
+        pdf.cell(30, 6, "Revenue", border=1, align="R")
+        pdf.cell(0, 6, "Outstanding", border=1, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        pdf.set_font(font, "", 8)
+        for row in report["by_partner"]:
+            name = row["name"]
+            if len(name) > 34:
+                name = name[:31] + "..."
+            pdf.cell(30, 6, row["code"][:18], border=1)
+            pdf.cell(65, 6, name, border=1)
+            pdf.cell(15, 6, str(row["orders"]), border=1, align="R")
+            pdf.cell(30, 6, money_str(row["revenue"]), border=1, align="R")
+            pdf.cell(0, 6, money_str(row["outstanding"]), border=1, align="R",
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(4)
 
     # Status breakdown
     pdf.set_font(font, "B", 11)

@@ -57,6 +57,7 @@ from app.database import Base  # noqa: E402
 from app.models import MovementReason  # noqa: E402
 from app.services import (  # noqa: E402
     b2b_service,
+    customer_service,
     inventory_service,
     order_service,
     recipe_service,
@@ -314,11 +315,65 @@ def main() -> None:
     order_service.record_payment(db, second.id, Decimal("2000.00"), "BANK", "NEFT-9931")
     order_service.update_status(db, first.id, "IN_PROGRESS")
 
+    # --- Retail customers and orders, so the channel split has two sides --
+    priya = customer_service.create_customer(
+        db,
+        {
+            "name": "Priya Sharma",
+            "phone": "9876543210",
+            "email": "priya.sharma@example.com",
+            "notes": "Birthday cakes. Prefers less sugar.",
+        },
+    )
+    customer_service.add_address(
+        db,
+        priya.id,
+        {
+            "label": "Home",
+            "line": "12 Bandra West, Mumbai 400050",
+            "is_default": True,
+            "is_active": True,
+        },
+    )
+    rahul = customer_service.create_customer(
+        db,
+        {"name": "Rahul Mehta", "phone": "9876500011", "email": None, "notes": ""},
+    )
+
+    retail_one = order_service.create_order(
+        db,
+        {
+            "customer_id": priya.id,
+            "items": [{"product_id": products["BLACK-1KG"].id, "quantity": 1}],
+            "delivery_type": "DELIVERY",
+            "delivery_address": "12 Bandra West, Mumbai 400050",
+            "fulfillment_date": (business_now() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            "advance_paid": Decimal("500.00"),
+            "advance_method": "UPI",
+            "notes": "Happy Birthday, Aarav — write it on the cake",
+        },
+    )
+    order_service.create_order(
+        db,
+        {
+            "customer_id": rahul.id,
+            "items": [
+                {"product_id": products["COOKIE-250"].id, "quantity": 2},
+                {"product_id": products["BROWNIE-9"].id, "quantity": 1},
+            ],
+            "fulfillment_date": business_now().replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M"),
+            "advance_paid": Decimal("0"),
+        },
+    )
+    order_service.update_status(db, retail_one.id, "IN_PROGRESS")
+
     db.close()
     engine.dispose()
 
     print(f"Demo database ready: {_target}")
-    print("  3 partners · 5 products with recipes · 4 B2B orders · 1 payment")
+    print(
+        "  3 partners · 5 products with recipes · 4 B2B orders · 2 retail orders · 2 payments"
+    )
     print()
     print("Run the app against it:")
     print(f"  DB_URL=sqlite:///{_target} SECRET_KEY=demo uvicorn app.main:app")

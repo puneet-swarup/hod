@@ -525,3 +525,95 @@ def test_order_date_is_local_not_utc(db, sample_customer, sample_product):
         },
     )
     assert order.order_date.date() == business_now().date()
+
+
+# ---------------------------------------------------------------------------
+# Reporting: the channel split
+# ---------------------------------------------------------------------------
+
+
+def test_monthly_report_splits_revenue_by_channel(db, product, sample_customer, sample_product):
+    from app.services import reports_service
+
+    account = _account(db, code="REP-1")
+    _b2b_order(db, account, product, qty=2)
+    order_service.create_order(
+        db,
+        {
+            "customer_id": sample_customer.id,
+            "items": [{"product_id": sample_product.id, "quantity": 1}],
+            "fulfillment_date": (business_now() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+        },
+    )
+
+    report = reports_service.build_report(db, business_now().year, business_now().month)
+    by_channel = {row["channel"]: row for row in report["by_channel"]}
+
+    assert set(by_channel) == {"RETAIL", "B2B"}
+    assert by_channel["B2B"]["orders"] == 1
+    assert by_channel["RETAIL"]["orders"] == 1
+    assert by_channel["B2B"]["revenue"] == Decimal("209.98")
+    assert by_channel["RETAIL"]["revenue"] == Decimal("525.00")  # 500 + 5% GST
+    # The split must add up to the headline number, or it is worse than useless.
+    assert (
+        by_channel["B2B"]["revenue"] + by_channel["RETAIL"]["revenue"]
+        == report["total_revenue"]
+    )
+
+
+def test_monthly_report_rolls_up_partners(db, product):
+    from app.services import reports_service
+
+    account = _account(db, code="REP-2")
+    _b2b_order(db, account, product, qty=1, po_reference="PO-R1")
+
+    report = reports_service.build_report(db, business_now().year, business_now().month)
+    assert len(report["by_partner"]) == 1
+    row = report["by_partner"][0]
+    assert row["code"] == "REP-2"
+    assert row["orders"] == 1
+    assert row["outstanding"] == row["revenue"]
+
+    item = next(r for r in report["itemized"] if r["channel"] == "B2B")
+    assert item["partner_name"] == "Sweet Corner"
+    assert item["po_reference"] == "PO-R1"
+
+
+def test_report_csv_has_channel_and_partner_sections(db, product):
+    from app.services import reports_service
+
+    account = _account(db, code="REP-3")
+    _b2b_order(db, account, product, qty=1)
+
+    report = reports_service.build_report(db, business_now().year, business_now().month)
+    text = reports_service.render_csv(report)
+
+    assert "Revenue by channel" in text
+    assert "B2B partners this month" in text
+    assert "REP-3" in text
+    assert "Channel" in text and "PO ref" in text
+
+
+def test_orders_export_carries_channel_and_po(db, product):
+    from app.services import export_service
+
+    account = _account(db, code="REP-4")
+    _b2b_order(db, account, product, qty=1, po_reference="PO-EXP")
+
+    today = business_now().date().isoformat()
+    _, content = export_service.export_orders_csv(db, "2020-01-01", today)
+    header, row = content.strip().splitlines()[0], content.strip().splitlines()[1]
+
+    assert "Channel" in header and "Partner" in header and "PO ref" in header
+    assert "B2B" in row
+    assert "Sweet Corner" in row
+    assert "PO-EXP" in row
+
+
+def test_retail_only_report_has_no_partner_section(db, sample_order):
+    from app.services import reports_service
+
+    report = reports_service.build_report(db, business_now().year, business_now().month)
+    assert report["by_partner"] == []
+    assert report["b2b_revenue"] == Decimal("0.00")
+    assert [r["channel"] for r in report["by_channel"]] == ["RETAIL"]

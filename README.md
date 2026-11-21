@@ -213,7 +213,11 @@ tests/
 | Document | What it is for |
 |---|---|
 | [User manual](docs/USER_MANUAL.md) | Every screen, field and rule — the reference for running the bakery |
+| [Training manual (PDF)](docs/training/House-of-Desserts-Training-Manual.pdf) | All five training guides in one printable A4 document |
+| [Training: retail orders](docs/training/retail-orders.md) | Customers, orders, the status flow, payments, invoices |
+| [Training: products & inventory](docs/training/products-and-inventory.md) | Products, recipes, stock, capacity |
 | [Training: B2B partners](docs/training/b2b-partners.md) | A worked, screenshot-led guide to selling to shops and franchisees |
+| [Training: reports & export](docs/training/reports-and-export.md) | The monthly report, the channel split, CSV export, audit |
 | [Training: routines](docs/training/routines.md) | The daily and monthly checklists |
 | [Training index](docs/training/README.md) | How to run a training session against the demo database |
 | [Architecture](docs/ARCHITECTURE.md) | The invariants that must not be broken |

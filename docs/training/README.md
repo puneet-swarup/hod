@@ -8,13 +8,28 @@ to remember how a screen works six months from now.
 | Module | Covers | Where |
 |---|---|---|
 | **Whole app, screen by screen** | Every screen, field and rule — the reference manual | [`../USER_MANUAL.md`](../USER_MANUAL.md) |
-| **Selling to shops and franchisees** | Partners, contracts, price lists, B2B orders, credit, statements — with screenshots and worked examples | [`b2b-partners.md`](b2b-partners.md) |
-| **Daily and monthly routines** | The two checklists that keep the data clean | [`routines.md`](routines.md) |
+| **Retail: customers and orders** | Type-ahead pickers, the status flow, payments, invoices, editing | [`retail-orders.md`](retail-orders.md) |
+| **Products, recipes and inventory** | SKUs, recipes and cost, stock ledger, capacity | [`products-and-inventory.md`](products-and-inventory.md) |
+| **Selling to shops and franchisees** | Partners, contracts, price lists, B2B orders, credit, statements | [`b2b-partners.md`](b2b-partners.md) |
+| **Reports, export and the audit trail** | The monthly report, the B2B split, CSV export, audit log | [`reports-and-export.md`](reports-and-export.md) |
+| **Daily and monthly routines** | The checklists that keep the data clean | [`routines.md`](routines.md) |
 
-The user manual is the complete reference. The B2B guide is the only
-module written as a standalone training session so far; the others can
-follow the same shape (what it is, the words, the steps, a worked
-example, troubleshooting, a routine).
+### The printed manual
+
+All five guides are also available as one PDF, with a cover and contents
+page, for printing or handing to a new person:
+
+**[House-of-Desserts-Training-Manual.pdf](House-of-Desserts-Training-Manual.pdf)** — 38 pages, A4.
+
+Rebuild it after editing any guide:
+
+```bash
+pip install markdown pillow
+python scripts/build_training_pdf.py
+```
+
+The script folds tall phone screenshots into two columns so they stay
+legible on A4, then asks headless Chromium to print the result.
 
 ## Reading order for a new person
 
