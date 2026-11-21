@@ -18,9 +18,8 @@ display boundary, via the `dt` / `d` Jinja filters registered in
 `app/main.py`.
 
 The move was right — the server's own clock is not a contract, and a
-hosted box runs in UTC whether or not anyone remembers to set it. But
-ADR-0014 was never marked superseded, and two templates were still
-calling `strftime()` on the raw stored value:
+hosted box runs in UTC whether or not anyone remembers to set it. But ADR-0014 was never marked superseded, and two
+templates were still calling `strftime()` on the raw stored value:
 
 - `audit.html` — the audit log's "Time" column
 - `reports.html` — the "Generated" column

@@ -208,6 +208,21 @@ tests/
   ...
 ```
 
+## Documentation
+
+| Document | What it is for |
+|---|---|
+| [User manual](docs/USER_MANUAL.md) | Every screen, field and rule — the reference for running the bakery |
+| [Training: B2B partners](docs/training/b2b-partners.md) | A worked, screenshot-led guide to selling to shops and franchisees |
+| [Training: routines](docs/training/routines.md) | The daily and monthly checklists |
+| [Training index](docs/training/README.md) | How to run a training session against the demo database |
+| [Architecture](docs/ARCHITECTURE.md) | The invariants that must not be broken |
+| [ADRs](docs/adr/) | Why each significant decision was made |
+
+`python scripts/seed_demo.py --db data/demo.db` builds a demo bakery —
+five products with recipes, three partners on different terms, four B2B
+orders — so the guides can be followed without touching real data.
+
 ## Key design decisions
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the invariants that must not be broken.

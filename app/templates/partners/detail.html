@@ -144,8 +144,9 @@
                                 </td>
                                 <td class="text-right">
                                     <form method="post" action="/b2b/{{ account.id }}/prices/{{ item.id }}/delete">
-                                        <button class="btn btn-ghost btn-xs" type="submit"
-                                                onclick="return confirm('Remove this rate?')">Remove</button>
+                                        <button class="btn btn-ghost btn-xs px-2" type="submit"
+                                                title="Remove this rate" aria-label="Remove this rate"
+                                                onclick="return confirm('Remove this rate?')">✕</button>
                                     </form>
                                 </td>
                             </tr>
@@ -262,8 +263,8 @@
                         <tr class="text-amber-900">
                             <th>Order</th>
                             <th class="hidden sm:table-cell">PO ref</th>
-                            <th>Status</th>
-                            <th class="text-right">Total</th>
+                            <th class="hidden sm:table-cell">Status</th>
+                            <th class="text-right hidden sm:table-cell">Total</th>
                             <th class="text-right">Balance</th>
                         </tr>
                     </thead>
@@ -271,18 +272,18 @@
                         {% for o in orders %}
                         <tr class="hover">
                             <td>
-                                <a href="/orders/{{ o.id }}" class="font-mono text-sm hover:underline">{{ o.order_number }}</a>
+                                <a href="/orders/{{ o.id }}" class="font-mono text-xs hover:underline whitespace-nowrap">{{ o.order_number }}</a>
                                 <div class="text-xs text-base-content/50">{{ o.fulfillment_date.strftime('%d %b') if o.fulfillment_date else '—' }}</div>
                             </td>
                             <td class="hidden sm:table-cell text-xs font-mono text-base-content/60">
                                 {{ o.b2b_terms.po_reference if o.b2b_terms and o.b2b_terms.po_reference else '—' }}
                             </td>
-                            <td>
+                            <td class="hidden sm:table-cell">
                                 <span class="badge {{ o.status_badge_class }} badge-sm">
                                     {{ o.status.value.replace('_', ' ') }}
                                 </span>
                             </td>
-                            <td class="text-right font-mono text-sm">{{ o.total_amount|money }}</td>
+                            <td class="text-right font-mono text-sm hidden sm:table-cell">{{ o.total_amount|money }}</td>
                             <td class="text-right font-mono text-sm {% if o.balance_due > 0 %}text-error{% endif %}">
                                 {{ o.balance_due|money }}
                             </td>

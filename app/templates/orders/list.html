@@ -41,7 +41,8 @@
             <div class="card-body p-4">
                 <div class="flex justify-between items-start gap-3">
                     <div class="min-w-0">
-                        <a href="/orders/{{ order.id }}" class="font-mono font-bold text-amber-900 hover:underline">
+                        <a href="/orders/{{ order.id }}"
+                           class="font-mono font-bold text-amber-900 hover:underline whitespace-nowrap text-sm sm:text-base">
                             {{ order.order_number }}
                         </a>
                         {% if order.is_b2b %}
@@ -60,7 +61,7 @@
                         </p>
                     </div>
                     <div class="text-right shrink-0">
-                        <div class="flex gap-1 flex-wrap justify-end">
+                        <div class="flex flex-col items-end gap-1 sm:flex-row sm:flex-wrap sm:justify-end">
                             <span class="badge {{ order.status_badge_class }} badge-sm">
                                 {{ order.status.value.replace('_', ' ') }}
                             </span>

@@ -7,16 +7,21 @@ A complete walkthrough of every screen, control, and data relationship.
 ## Table of Contents
 
 1. [Getting Started](#1-getting-started)
-2. [Dashboard](#2-dashboard)
-3. [Products](#3-products)
-4. [Customers](#4-customers)
-5. [Orders](#5-orders)
-6. [Invoices](#6-invoices)
-7. [Export](#7-export)
-8. [Audit Log](#8-audit-log)
-9. [Settings](#9-settings)
-10. [Data Relationships](#10-data-relationships)
-11. [FAQ & Troubleshooting](#11-faq--troubleshooting)
+2. [Today — the home screen](#2-today--the-home-screen)
+3. [Dashboard](#3-dashboard)
+4. [Products](#4-products)
+5. [Customers](#5-customers)
+6. [Orders](#6-orders)
+7. [B2B partners](#7-b2b-partners)
+8. [Invoices](#8-invoices)
+9. [Export](#9-export)
+10. [Audit Log](#10-audit-log)
+11. [Settings](#11-settings)
+12. [Data Relationships](#12-data-relationships)
+13. [FAQ & Troubleshooting](#13-faq--troubleshooting)
+
+> Deep-dive training material lives in [`docs/training/`](training/README.md).
+> The B2B module has its own guide: [b2b-partners.md](training/b2b-partners.md).
 
 ---
 
@@ -49,7 +54,64 @@ On mobile, a floating **"+"** button (bottom-right) takes you directly to "New O
 
 ---
 
-## 2. Dashboard
+## 2. Today — the home screen
+
+**URL:** `/today` (also what `/` redirects to)
+
+This is the screen the bakery actually opens first thing in the morning.
+It answers three questions: what is going out today, what do I need to
+bake, and what am I short of.
+
+### Low stock (top, only when relevant)
+
+Appears only if an ingredient is at or below its reorder threshold.
+Columns: ingredient, on hand, threshold, short by. Sorted by the biggest
+shortfall first. **Manage inventory** jumps to the ingredients list.
+
+### Dispatch — Today
+
+Every non-cancelled order whose fulfillment date is *today*, sorted by
+time. Columns: time, order, customer (tap the phone number to call),
+type (delivery/pickup), fulfillment status, payment status, balance.
+
+Each row carries two shortcuts:
+
+- **💬** — opens the pre-written WhatsApp message for that order.
+- **Mark [next status]** — advances the order (CONFIRMED → IN PROGRESS →
+  READY → DELIVERED) and reloads the page.
+
+A B2B order shows the partner name with a small **B2B** badge instead of a
+customer name.
+
+### Production — Overdue & Next 7 Days
+
+Ingredients and time are planned here, aggregated **by SKU**, in three
+buckets:
+
+| Bucket | Meaning |
+|---|---|
+| **Overdue — fulfillment date has passed** | Still CONFIRMED or IN PROGRESS after its date. Late work that must not be forgotten. |
+| **Urgent — fulfilling today** | Bake these now. |
+| **Tomorrow** | Prep tonight or early tomorrow. |
+| **Later this week** | Everything else inside the 7-day window. |
+
+Columns: item, quantity (total units across all orders), **fulfillment**
+(the earliest date and time this SKU is needed, with the number of orders
+underneath), and prep time in hours.
+
+> An order moved *beyond* seven days does not appear here until it enters
+> the window. That is deliberate — a 7-day horizon is what a production
+> plan is for. Overdue orders, by contrast, stay visible until they are
+> delivered or cancelled.
+
+### The badge in the header
+
+The unit count next to the production heading is the total number of items
+in the window, including overdue work.
+
+---
+
+## 3. Dashboard
 
 **URL:** `/`
 
@@ -73,13 +135,15 @@ On mobile, a floating **"+"** button (bottom-right) takes you directly to "New O
 | CONFIRMED | Blue | You accepted the order |
 | IN_PROGRESS | Yellow | You're baking/preparing |
 | READY | Green | Ready for pickup/delivery |
-| DELIVERED | Purple | Customer received it |
-| PAID | Green | Full payment received |
+| DELIVERED | Green | Customer received it — the successful end of fulfillment |
 | CANCELLED | Red | Order was cancelled |
+
+> There is **no PAID status**. Whether an order is paid is a separate
+> axis, shown by its own **Payment: Paid / Partial / Unpaid** badge.
 
 ---
 
-## 3. Products
+## 4. Products
 
 **URL:** `/products`
 
@@ -114,11 +178,11 @@ Click **Edit** on a product card. Same form, pre-filled. Change any field → Sa
 
 ### Delete Product
 
-Click **Delete** → confirm. Product is **soft-deleted** (marked inactive). It disappears from the order form dropdown but remains in historical orders.
+Click **Delete** → confirm. Product is **soft-deleted** (marked inactive). It disappears from the order form's type-ahead but remains in historical orders.
 
 ---
 
-## 4. Customers
+## 5. Customers
 
 **URL:** `/customers`
 
@@ -168,15 +232,21 @@ Click a customer's **name** in the list. Shows:
 
 ### Search (in Order Form)
 
-When creating an order, the customer field is a **typeahead search**:
-- Type 2+ characters → dropdown appears
-- Matches by **name** (case-insensitive) or **phone number** (partial match)
-- Shows: Name, Phone, address count
-- Click a result → customer is selected, their addresses populate the delivery field
+Both pickers in the order form are **type-aheads**, not dropdowns:
+
+| Field | Type | Matches on | Shows |
+|---|---|---|---|
+| Customer | 2+ characters | name (any case) or phone (partial) | name, phone, address count |
+| Product | 2+ characters | name, SKU or category | name, SKU, measure/pack, price |
+
+Tap a result to select it. Editing the text afterwards clears the
+selection, so you cannot accidentally submit a half-typed name. The
+customer's default address fills the delivery field when Delivery is
+chosen.
 
 ---
 
-## 5. Orders
+## 6. Orders
 
 **URL:** `/orders`
 
@@ -205,32 +275,43 @@ INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED
 
 Click **"+ New Order"** (or the mobile FAB "+").
 
-**Step 1: Customer & Delivery**
+The form is five cards, top to bottom: **Customer**, **Fulfillment**,
+**Items**, **Advance**, **Notes**. (A B2B order inserts a **Partner
+terms** card and a **Partner pricing** panel — see §7.)
+
+**Customer**
 
 | Field | How it works |
 |-------|-------------|
-| Customer | Type to search. Click a result to select. |
-| Delivery Type | "Pickup" (default) or "Delivery" |
-| Order Date | Pre-filled with today. Editable. |
-| Delivery Date | Optional. When should it be delivered/ready? |
-| Delivery Address | **Disabled** if Pickup. **Enabled** if Delivery. Shows a dropdown of saved addresses (if customer has any). Default address auto-fills. You can type a custom address. |
-| Notes | Free text (cake message, instructions) |
+| Retail / B2B toggle | Top-right of the card. Retail is the default. |
+| Customer | **Type-ahead**: type 2+ characters of a name or phone, tap a result. A hidden id is stored — the visible text is just a label. |
+| + New Customer | Opens a mini form (name, phone, email, address) without leaving the order. |
 
-**Step 2: Items**
+**Fulfillment**
 
-- Click **"+ Add Item"** to add rows
-- Each row: Product dropdown (shows name + price) + Quantity + ✕ (remove row)
-- You can add as many items as needed
-- One row is shown by default
+| Field | How it works |
+|-------|-------------|
+| Type | Pickup (default) or Delivery. Delivery reveals the address box. |
+| Order placed on | Pre-filled with today. Editable. |
+| Ready by / Fulfillment time | **Required.** Defaults to tomorrow 12:00. Orders are sorted by this everywhere. |
+| Delivery address | Auto-filled from the customer's default address when Delivery is chosen; type over it freely. Hidden for Pickup. |
 
-**Step 3: Advance Payment**
+**Items**
 
-| Field | Notes |
-|-------|-------|
-| Amount Received | How much advance the customer paid (0 if none) |
-| Method | UPI / Cash / Bank Transfer |
+- One empty row to start; **+ Add item** clones it.
+- Each row: **product type-ahead** (name or SKU, 2+ characters, tap a
+  result) + **Qty** + **Remove**.
+- Under a chosen product you see its price, e.g. `₹850.00`.
+- The form refuses to submit while a row has text but no product chosen —
+  pick from the list rather than typing a name.
 
-**Submit:** Click **"Create Order"**. You're redirected to the order detail page.
+**Advance** — amount received (0 if none) and the method (Cash / UPI /
+Bank / Card). Recording an advance creates a payment immediately; it does
+not change the fulfillment status.
+
+**Notes** — free text: cake message, allergies, instructions.
+
+**Submit:** **Create Order** → you land on the order detail page.
 
 ### Order Detail
 
@@ -252,13 +333,93 @@ Shows:
 
 ### Editing Orders
 
-**Not yet implemented** (Phase 2). Once an order is created, it's locked. If you need to change something:
-- For INQUIRY/CONFIRMED: Cancel and recreate
-- For later states: Contact the customer, note it in the order notes
+**Edit** appears on the order detail page while the order is **CONFIRMED**.
+You can change the fulfillment time, delivery type and address, the notes,
+and the items. Things to know:
+
+- Payments already recorded are never touched.
+- The order total cannot be reduced below what has already been paid.
+- Every change is written to the audit log with old and new values.
+- If an invoice has already been issued, editing the order does **not**
+  change that invoice — it is a snapshot.
+- Once the order moves to IN PROGRESS it is locked. Cancel and recreate,
+  or note the change in the order.
+
+A B2B order is re-priced from the partner's contract on every edit, so a
+line added later picks up the right rate.
 
 ---
 
-## 6. Invoices
+## 7. B2B partners
+
+**URL:** `/b2b`
+
+Selling to shops and franchisees. This section is a summary — the full
+training guide, with screenshots, worked examples and troubleshooting, is
+[`docs/training/b2b-partners.md`](training/b2b-partners.md).
+
+### When to use it
+
+Another *business* buying on agreed terms: a café, a sweet shop, a
+franchisee, a distributor. Not a retail customer who happens to order
+often — keep those as customers.
+
+### The pieces
+
+| Piece | What it holds |
+|---|---|
+| **Partner** | The shop: code, contact, GSTIN, credit days, credit limit, minimum order, cut-off, lead time, dispatch days |
+| **Contract** | Dated envelope for prices. Versioned — never edit one that has orders; close it and open a new one |
+| **Price list** | Product + "from quantity" + rate, or a commission percentage |
+| **B2B order** | A normal order that uses the partner's prices instead of retail ones |
+
+### Two pricing models
+
+- **Unit price** — an agreed rate per product, optionally cheaper at
+  volume (e.g. ₹780 each, ₹740 from 10 up).
+- **Commission** — the partner sells at your MRP and keeps a cut; you
+  invoice MRP minus that cut (e.g. MRP ₹540 − 35% = ₹351).
+
+A contract uses one model by default, and any product can override it.
+
+### Taking a B2B order
+
+`/orders/new` → flip the toggle at the top of the Customer card from
+**Retail** to **B2B partner** → search the shop → fill the **Partner
+terms** card (PO reference, payment terms, dispatch date) → add items as
+usual.
+
+A **Partner pricing** panel appears and updates as you type, showing each
+line's rate, its source (*Contract price (10+)*, *MRP less 35%
+commission*, or *Retail price*), the total, and any warnings.
+
+### What is different from retail
+
+| | Retail | B2B |
+|---|---|---|
+| Number | `HOD-2026-0001` | `HOD-B2B-2026-0001` |
+| Price | product's retail price | contract price |
+| Invoice | customer | partner, with GSTIN and PO reference |
+| Checks | none | minimum order, cut-off, lead time, dispatch day, credit limit — **warnings only, never blocks** |
+| Production | shared line | shared line (a dedicated line is a per-partner flag for later) |
+
+Everything else — statuses, ingredient deduction, COGS, WhatsApp
+messages, reports — is identical.
+
+### Credit
+
+**Outstanding** is the sum of unpaid balances across a partner's open
+orders, recomputed every time you look. There is no separate ledger.
+Exceeding the credit limit turns the amount red on the partners list and
+on the partner page, and adds a warning to the order — it does not block
+anything.
+
+**Partner page → Statement** gives billed / received / outstanding plus
+one row per order, downloadable as CSV for the monthly chase.
+
+---
+
+## 8. Invoices
 
 ### Viewing an Invoice
 
@@ -297,7 +458,7 @@ Printed on 80mm (or 58mm) roll paper. Shows:
 
 ---
 
-## 7. Export
+## 9. Export
 
 **URL:** `/export`
 
@@ -321,7 +482,7 @@ Opens directly in Excel. Columns are comma-separated. Use for:
 
 ---
 
-## 8. Audit Log
+## 10. Audit Log
 
 **URL:** `/audit`
 
@@ -363,7 +524,7 @@ All | Orders | Payments | Customers | Products
 
 ---
 
-## 9. Settings
+## 11. Settings
 
 **URL:** `/settings`
 
@@ -387,7 +548,7 @@ GSTIN=
 PHONE=+91 98765 43210   
 ```
 
-## 10. Data Relationships
+## 12. Data Relationships
 ```mermaid
 ┌──────────────┐       ┌──────────────┐
 │  CUSTOMERS   │       │  ADDRESSES   │
@@ -470,7 +631,7 @@ PHONE=+91 98765 43210
 | Payment | **Never deleted.** Immutable financial record. |
 | Invoice | **Never deleted.** Immutable financial record. |
 
-## 11. FAQ & Troubleshooting
+## 13. FAQ & Troubleshooting
 #### "Why can't I select a customer in the order form?"
 You need at least 2 characters in the search box. Also, the customer must be active (not deleted).
 

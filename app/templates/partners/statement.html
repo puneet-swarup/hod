@@ -49,8 +49,8 @@
                         <th>Date</th>
                         <th>Order</th>
                         <th class="hidden sm:table-cell">PO ref</th>
-                        <th>Status</th>
-                        <th class="text-right">Total</th>
+                        <th class="hidden sm:table-cell">Status</th>
+                        <th class="text-right hidden sm:table-cell">Total</th>
                         <th class="text-right hidden sm:table-cell">Paid</th>
                         <th class="text-right">Balance</th>
                     </tr>
@@ -59,11 +59,11 @@
                     {% for row in data.rows %}
                     {% set o = row.order %}
                     <tr class="hover">
-                        <td class="text-xs font-mono whitespace-nowrap">{{ o.order_date.strftime('%d %b %Y') }}</td>
-                        <td><a href="/orders/{{ o.id }}" class="font-mono text-sm hover:underline">{{ o.order_number }}</a></td>
+                        <td class="text-xs font-mono whitespace-nowrap">{{ o.order_date.strftime('%d %b') }}</td>
+                        <td><a href="/orders/{{ o.id }}" class="font-mono text-xs hover:underline whitespace-nowrap">{{ o.order_number }}</a></td>
                         <td class="hidden sm:table-cell text-xs font-mono text-base-content/60">{{ row.po or '—' }}</td>
-                        <td><span class="badge {{ o.status_badge_class }} badge-sm">{{ o.status.value.replace('_',' ') }}</span></td>
-                        <td class="text-right font-mono text-sm">{{ row.total|money }}</td>
+                        <td class="hidden sm:table-cell"><span class="badge {{ o.status_badge_class }} badge-sm whitespace-nowrap">{{ o.status.value.replace('_',' ') }}</span></td>
+                        <td class="text-right font-mono text-sm hidden sm:table-cell">{{ row.total|money }}</td>
                         <td class="text-right hidden sm:table-cell font-mono text-sm text-base-content/60">{{ row.paid|money }}</td>
                         <td class="text-right font-mono text-sm {% if row.balance > 0 %}text-error{% endif %}">{{ row.balance|money }}</td>
                     </tr>
