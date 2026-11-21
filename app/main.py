@@ -2,6 +2,7 @@
 FastAPI application entry point.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -17,6 +18,55 @@ from app.utils.time import to_business_tz
 
 settings = get_settings()
 
+logger = logging.getLogger("hod.startup")
+
+
+def warn_if_schema_is_behind() -> str | None:
+    """Shout in the log when the database schema is older than the code.
+
+    create_all() below creates missing TABLES but never adds missing
+    COLUMNS, so a release with a migration deployed without running
+    `alembic upgrade head` starts perfectly healthy and then fails on the
+    first page that reads a new column ("no such column: orders.channel").
+
+    This is a warning, not a hard failure: the process staying up lets the
+    operator read the error page and the log together, instead of watching
+    the service crash-loop. Returns the message when it fires (tests use it).
+    """
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        from sqlalchemy import text
+    except ImportError:  # pragma: no cover - alembic is a runtime dependency
+        return None
+
+    try:
+        head = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
+    except Exception:  # pragma: no cover - no alembic.ini next to the app
+        return None
+    if not head:
+        return None
+
+    try:
+        with engine.connect() as conn:
+            current = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    except Exception:
+        # No alembic_version table: a fresh database built by create_all
+        # (tests, first run). Nothing to compare against.
+        return None
+
+    if current == head:
+        return None
+
+    message = (
+        f"Database schema is at revision {current or '(empty)'} but the code "
+        f"expects {head}. Pages that use the newer columns will fail with "
+        f"'no such column'. Run: alembic upgrade head  (see the deployment "
+        f"runbook, step 3)"
+    )
+    logger.error(message)
+    return message
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,6 +81,9 @@ async def lifespan(app: FastAPI):
     # `alembic upgrade head` has been run. It creates missing tables
     # but does NOT alter existing ones — Alembic handles those.
     Base.metadata.create_all(engine)
+
+    # Fail loudly in the log rather than silently serving broken pages.
+    warn_if_schema_is_behind()
 
     yield
 

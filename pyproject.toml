@@ -64,6 +64,8 @@ filterwarnings = [
     # Third-party deprecations we can't fix locally
     "ignore:The anyio.abc.BlockingPortal alias is deprecated.*:DeprecationWarning",
     "ignore:Using `httpx` with `starlette.testclient` is deprecated.*:DeprecationWarning",
+    # Alembic 1.16 wants path_separator in alembic.ini; harmless either way.
+    "ignore:No path_separator found in configuration.*:DeprecationWarning",
 ]
 
 [tool.setuptools.packages.find]
