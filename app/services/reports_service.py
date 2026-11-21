@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import get_settings
 from app.models import Order, OrderStatus
 from app.utils.money import money
+from app.utils.time import business_now
 
 MONTH_NAMES = [
     "",
@@ -229,7 +230,7 @@ def build_report(db: Session, year: int, month: int) -> dict:
         "year": year,
         "month": month,
         "period_label": f"{MONTH_NAMES[month]} {year}",
-        "generated_at": datetime.now(),
+        "generated_at": business_now(),
         "orders_total": len(all_orders),
         "orders_active": len(active_orders),
         "orders_cancelled": by_status.get("CANCELLED", 0),
@@ -612,5 +613,8 @@ def list_existing_reports() -> list[dict]:
     out = list(by_month.values())
     out.sort(key=lambda r: (r["year"], r["month"]), reverse=True)
     for r in out:
-        r["generated_at"] = datetime.fromtimestamp(r["generated_at"])
+        # File mtime is a POSIX timestamp. Convert to naive UTC so the
+        # templates can render it in the business timezone (IST) with the
+        # `dt` filter, regardless of the server's own clock setting.
+        r["generated_at"] = datetime.fromtimestamp(r["generated_at"], UTC).replace(tzinfo=None)
     return out

@@ -1,7 +1,5 @@
 """Dashboard route — operational stats and recent orders."""
 
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
@@ -9,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Order, OrderStatus, Product
-from app.utils.time import business_today_bounds_utc
+from app.utils.time import business_now, business_today_bounds_utc
 
 router = APIRouter()
 
@@ -36,7 +34,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             select(func.count(Order.id)).where(
                 Order.fulfillment_date >= today_start,
                 Order.fulfillment_date <= today_end,
-                Order.status.not_in([OrderStatus.PAID, OrderStatus.CANCELLED]),
+                Order.status.not_in([OrderStatus.DELIVERED, OrderStatus.CANCELLED]),
             )
         ).scalar()
         or 0
@@ -79,6 +77,6 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "settings": settings,
             "stats": stats,
             "recent_orders": recent_orders,
-            "now": datetime.now(),
+            "now": business_now(),
         },
     )

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-0015](0015-store-utc-display-ist.md)
 
 ## Date
 

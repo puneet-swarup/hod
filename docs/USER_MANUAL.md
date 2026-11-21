@@ -192,12 +192,13 @@ Cards showing: Order #, Customer, Date, Status badge, Amount, Balance (if any).
 
 ### Order Lifecycle
 ```
-INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED → PAID
+INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED
 ↘ CANCELLED (from any state before DELIVERED)
 ```
 
 - You **cannot** skip states (e.g., can't go CONFIRMED → READY directly)
-- **PAID** is set automatically when balance reaches 0
+- **DELIVERED** is the final fulfillment step — the order is with the customer.
+- **Payment is separate.** Whether the customer has paid is shown by the **Payment: Paid / Partial / Unpaid** badge. Recording a payment never advances fulfillment, and delivering never changes the payment state.
 - **CANCELLED** is a terminal state (can't un-cancel)
 
 ### New Order
@@ -247,7 +248,7 @@ Shows:
 - Amount (pre-filled with remaining balance)
 - Method (UPI/Cash/Bank)
 - Reference (optional — UPI transaction ID, etc.)
-- Click "Record" → balance updates. If balance = 0, status auto-changes to PAID.
+- Click "Record" → balance updates and the **Payment** badge changes (Paid / Partial / Unpaid). The fulfillment status is not affected.
 
 ### Editing Orders
 

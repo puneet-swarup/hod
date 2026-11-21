@@ -83,3 +83,6 @@ tests.backup/
 # Agent / local planning (not part of the app)
 context.md
 .forge-permissions.json
+
+# Forge Agent session memory (never commit)
+SESSION_CONTEXT.md

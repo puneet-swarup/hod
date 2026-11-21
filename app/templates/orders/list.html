@@ -31,7 +31,6 @@
         <a href="/orders?status=IN_PROGRESS{{ qs }}" class="tab {{ 'tab-active' if filter == 'IN_PROGRESS' else '' }}">In Progress</a>
         <a href="/orders?status=READY{{ qs }}"       class="tab {{ 'tab-active' if filter == 'READY' else '' }}">Ready</a>
         <a href="/orders?status=DELIVERED{{ qs }}"   class="tab {{ 'tab-active' if filter == 'DELIVERED' else '' }}">Delivered</a>
-        <a href="/orders?status=PAID{{ qs }}"        class="tab {{ 'tab-active' if filter == 'PAID' else '' }}">Paid</a>
         <a href="/orders?status=CANCELLED{{ qs }}"   class="tab {{ 'tab-active' if filter == 'CANCELLED' else '' }}">Cancelled</a>
     </div>
 
@@ -63,7 +62,7 @@
                                 {{ order.status.value.replace('_', ' ') }}
                             </span>
                             <span class="badge {{ order.payment_badge_class }} badge-sm">
-                                {{ order.payment_label }}
+                                Payment: {{ order.payment_label }}
                             </span>
                         </div>
                         <p class="font-bold mt-1">{{ order.total_amount|money }}</p>
@@ -83,13 +82,12 @@
                     </button>
                     {% endif %}
 
-                    {% if order.status.value not in ['CANCELLED', 'PAID'] %}
+                    {% if order.status.value not in ['CANCELLED', 'DELIVERED'] %}
                         {% set next_status = {
                             'INQUIRY': 'CONFIRMED',
                             'CONFIRMED': 'IN_PROGRESS',
                             'IN_PROGRESS': 'READY',
-                            'READY': 'DELIVERED',
-                            'DELIVERED': 'PAID'
+                            'READY': 'DELIVERED'
                         }.get(order.status.value) %}
                         {% if next_status %}
                         <form hx-post="/orders/{{ order.id }}/status"

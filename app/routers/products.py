@@ -4,9 +4,11 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models import Product
 from app.services import inventory_service, product_service, recipe_service
 from app.utils.sku import validate_sku_format
 
@@ -51,6 +53,50 @@ def list_products_page(request: Request, db: Session = Depends(get_db)):
             "capacities": capacities,
             "economics": economics,
         },
+    )
+
+
+# ---------------------------------------------------------------
+# Type-ahead (order form)
+# ---------------------------------------------------------------
+
+
+@router.get("/search", response_class=HTMLResponse)
+def search_products(request: Request, q: str = "", db: Session = Depends(get_db)):
+    """Type-ahead for the order form's product field.
+
+    Matches name, SKU or category, active products only, at most 10 rows.
+    Declared before the /{product_id}/... routes so it is never captured
+    as a product id.
+    """
+    templates = request.app.state.templates
+    q_clean = (q or "").strip()
+    if len(q_clean) < 2:
+        return HTMLResponse("")
+
+    term = f"%{q_clean}%"
+    results = (
+        db.execute(
+            select(Product)
+            .where(
+                Product.is_active.is_(True),
+                or_(
+                    Product.name.ilike(term),
+                    Product.sku.ilike(term),
+                    Product.category.ilike(term),
+                ),
+            )
+            .order_by(Product.name)
+            .limit(10)
+        )
+        .scalars()
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="products/search_results.html",
+        context={"results": results, "q": q_clean},
     )
 
 

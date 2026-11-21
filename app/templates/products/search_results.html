@@ -1,0 +1,20 @@
+{% from "products/_label.html" import product_label %}
+{% if results %}
+{% for p in results %}
+<div class="flex items-center justify-between gap-2 px-3 py-2 hover:bg-amber-50 cursor-pointer
+            border-b border-base-200 last:border-0 product-result"
+     data-id="{{ p.id }}"
+     data-label="{{ product_label(p) }}"
+     data-price-label="{{ p.base_price|money }}">
+    <div class="min-w-0">
+        <div class="font-medium text-sm truncate">{{ p.name }}</div>
+        <div class="text-xs text-base-content/50 font-mono truncate">
+            {{ p.sku }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %}
+        </div>
+    </div>
+    <span class="text-sm font-semibold whitespace-nowrap">{{ p.base_price|money }}</span>
+</div>
+{% endfor %}
+{% else %}
+<div class="px-3 py-3 text-sm text-base-content/50">No products found for "{{ q }}"</div>
+{% endif %}

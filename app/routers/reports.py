@@ -1,6 +1,5 @@
 """Reports page — list existing reports, generate new ones."""
 
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -10,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.services import reports_service
+from app.utils.time import business_now
 
 router = APIRouter()
 
@@ -25,7 +25,7 @@ def reports_page(
     settings = request.app.state.settings
 
     existing = reports_service.list_existing_reports()
-    now = datetime.now()
+    now = business_now()
 
     return templates.TemplateResponse(
         request=request,

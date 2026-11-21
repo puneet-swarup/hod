@@ -34,7 +34,7 @@
                     <tbody>
                         {% for log in logs %}
                         <tr class="hover">
-                            <td class="text-sm font-mono whitespace-nowrap">{{ log.changed_at.strftime('%d %b %H:%M') }}</td>
+                            <td class="text-sm font-mono whitespace-nowrap">{{ log.changed_at|dt('%d %b %H:%M') }}</td>
                             <td>
                                 <span class="badge badge-ghost badge-sm">{{ log.entity_type }}#{{ log.entity_id }}</span>
                             </td>

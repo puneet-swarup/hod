@@ -2,6 +2,41 @@
 {% set is_edit = (mode == 'edit') %}
 {% block title %}{{ "Edit " ~ order.order_number if is_edit else "New Order" }} — {{ settings.app_name }}{% endblock %}
 
+{% from "products/_label.html" import product_label %}
+
+{% macro item_row(pid=None, qty=1, label='') %}
+<div class="item-row grid grid-cols-12 gap-2 items-end">
+    <div class="col-span-7 form-control">
+        <label class="label"><span class="label-text font-semibold">Product</span></label>
+        <div class="relative">
+            <input type="hidden" name="product_id" class="product-id"
+                   value="{{ pid if pid else '' }}" />
+            <input type="text" class="input input-bordered input-sm w-full product-search"
+                   autocomplete="off"
+                   name="q"
+                   placeholder="Type a product name or SKU…"
+                   value="{{ label }}"
+                   {% if label %}data-selected-label="{{ label }}"{% endif %}
+                   hx-get="/products/search"
+                   hx-trigger="keyup changed delay:250ms, search"
+                   hx-target="next .product-results"
+                   hx-swap="innerHTML" />
+            <div class="product-results absolute z-30 mt-1 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-64 overflow-y-auto hidden"></div>
+        </div>
+        <p class="product-hint text-xs text-base-content/60"></p>
+    </div>
+    <div class="col-span-3 form-control">
+        <label class="label"><span class="label-text font-semibold">Qty</span></label>
+        <input type="number" min="1" value="{{ qty }}" name="quantity"
+               class="input input-bordered input-sm w-full" required />
+    </div>
+    <div class="col-span-2">
+        <button type="button" class="btn btn-ghost btn-sm w-full"
+                onclick="this.closest('.item-row').remove()">Remove</button>
+    </div>
+</div>
+{% endmacro %}
+
 {% block content %}
 <div class="container mx-auto max-w-3xl space-y-4">
 
@@ -43,19 +78,29 @@
                         </p>
                     </div>
                 {% else %}
+                    {% set selected_id = (form_data.customer_id if form_data and form_data.customer_id else preset_customer_id) %}
+                    {% set preset_c = (customers | selectattr('id', 'equalto', selected_id) | list | first) if selected_id else None %}
                     <div class="flex flex-col sm:flex-row gap-2">
-                        <select name="customer_id" id="customer_id" class="select select-bordered w-full sm:flex-1 sm:min-w-0" required>
-                            <option value="">Select a customer…</option>
-                            {% for c in customers %}
-                            {% set selected_id = (form_data.customer_id if form_data and form_data.customer_id else preset_customer_id) %}
-                            <option value="{{ c.id }}"
-                                    data-default-address="{{ c.default_address_line }}"
-                                    data-delivery-type="{{ 'DELIVERY' if c.default_address_line else 'PICKUP' }}"
-                                    {% if selected_id and c.id == selected_id %}selected{% endif %}>
-                                {{ c.name }} — {{ c.phone }}
-                            </option>
-                            {% endfor %}
-                        </select>
+                        <div class="relative w-full sm:flex-1 sm:min-w-0">
+                            <input type="hidden" name="customer_id" id="customer_id"
+                                   value="{{ selected_id if selected_id else '' }}"
+                                   {% if preset_c %}
+                                   data-name="{{ preset_c.name }}"
+                                   data-default-address="{{ preset_c.default_address_line }}"
+                                   data-delivery-type="{{ 'DELIVERY' if preset_c.default_address_line else 'PICKUP' }}"
+                                   {% endif %} />
+                            <input type="text" id="customer-search" autocomplete="off"
+                                   name="q"
+                                   class="input input-bordered w-full"
+                                   placeholder="Type a name or phone to search…"
+                                   hx-get="/customers/search"
+                                   hx-trigger="keyup changed delay:300ms, search"
+                                   hx-target="#customer-results"
+                                   hx-swap="innerHTML" />
+                            <div id="customer-results"
+                                 class="absolute z-30 mt-1 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-64 overflow-y-auto hidden"></div>
+                            <p id="customer-selected" class="text-xs text-base-content/60 mt-1"></p>
+                        </div>
                         <button type="button" class="btn btn-outline whitespace-nowrap shrink-0"
                                 onclick="openQuickAdd()">
                             + New Customer
@@ -119,77 +164,16 @@
                 <div id="items" class="space-y-2">
                     {% if is_edit %}
                         {% for item in order.items %}
-                        <div class="item-row grid grid-cols-12 gap-2 items-end">
-                            <div class="col-span-7 form-control">
-                                <label class="label"><span class="label-text font-semibold">Product</span></label>
-                                <select name="product_id" class="select select-bordered select-sm w-full" required>
-                                    <option value="">Select…</option>
-                                    {% for p in products %}
-                                    <option value="{{ p.id }}" {% if p.id == item.product_id %}selected{% endif %}>
-                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-span-3 form-control">
-                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
-                                <input type="number" min="1" value="{{ item.quantity }}" name="quantity"
-                                       class="input input-bordered input-sm w-full" required />
-                            </div>
-                            <div class="col-span-2">
-                                <button type="button" class="btn btn-ghost btn-sm w-full"
-                                        onclick="this.closest('.item-row').remove()">Remove</button>
-                            </div>
-                        </div>
+                            {% set p = (products | selectattr('id', 'equalto', item.product_id) | list | first) %}
+                            {{ item_row(item.product_id, item.quantity, product_label(p) if p else '') }}
                         {% endfor %}
                     {% elif preset_items %}
                         {% for item in preset_items %}
-                        <div class="item-row grid grid-cols-12 gap-2 items-end">
-                            <div class="col-span-7 form-control">
-                                <label class="label"><span class="label-text font-semibold">Product</span></label>
-                                <select name="product_id" class="select select-bordered select-sm w-full" required>
-                                    <option value="">Select…</option>
-                                    {% for p in products %}
-                                    <option value="{{ p.id }}" {% if p.id == item.product_id %}selected{% endif %}>
-                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-span-3 form-control">
-                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
-                                <input type="number" min="1" value="{{ item.quantity }}" name="quantity"
-                                       class="input input-bordered input-sm w-full" required />
-                            </div>
-                            <div class="col-span-2">
-                                <button type="button" class="btn btn-ghost btn-sm w-full"
-                                        onclick="this.closest('.item-row').remove()">Remove</button>
-                            </div>
-                        </div>
+                            {% set p = (products | selectattr('id', 'equalto', item.product_id) | list | first) %}
+                            {{ item_row(item.product_id, item.quantity, product_label(p) if p else '') }}
                         {% endfor %}
                     {% else %}
-                        <div class="item-row grid grid-cols-12 gap-2 items-end">
-                            <div class="col-span-7 form-control">
-                                <label class="label"><span class="label-text font-semibold">Product</span></label>
-                                <select name="product_id" class="select select-bordered select-sm w-full" required>
-                                    <option value="">Select…</option>
-                                    {% for p in products %}
-                                    <option value="{{ p.id }}">
-                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-span-3 form-control">
-                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
-                                <input type="number" min="1" value="1" name="quantity"
-                                       class="input input-bordered input-sm w-full" required />
-                            </div>
-                            <div class="col-span-2">
-                                <button type="button" class="btn btn-ghost btn-sm w-full"
-                                        onclick="this.closest('.item-row').remove()">Remove</button>
-                            </div>
-                        </div>
+                        {{ item_row() }}
                     {% endif %}
                 </div>
 
@@ -293,29 +277,147 @@ function addItemRow() {
     const container = document.getElementById('items');
     const template = container.querySelector('.item-row');
     const clone = template.cloneNode(true);
-    clone.querySelector('select[name="product_id"]').value = '';
-    clone.querySelector('input[name="quantity"]').value = 1;
+
+    const hidden = clone.querySelector('.product-id');
+    if (hidden) hidden.value = '';
+    const search = clone.querySelector('.product-search');
+    if (search) {
+        search.value = '';
+        delete search.dataset.selectedLabel;
+        search.classList.remove('input-error');
+    }
+    const hint = clone.querySelector('.product-hint');
+    if (hint) hint.textContent = '';
+    const box = clone.querySelector('.product-results');
+    if (box) {
+        box.innerHTML = '';
+        box.classList.add('hidden');
+    }
+    const qty = clone.querySelector('input[name="quantity"]');
+    if (qty) qty.value = 1;
+
     container.appendChild(clone);
+    // The clone carries hx-* attributes but htmx has not seen it yet.
+    if (window.htmx) window.htmx.process(clone);
 }
+
+/* Product type-ahead. Runs for every item row, in create and edit mode. */
+(function () {
+    function boxFor(input) {
+        return input ? input.parentElement.querySelector('.product-results') : null;
+    }
+
+    function closeBox(box) {
+        if (!box) return;
+        box.classList.add('hidden');
+        box.innerHTML = '';
+    }
+
+    function clearSelection(itemRow) {
+        if (!itemRow) return;
+        const hidden = itemRow.querySelector('.product-id');
+        const input = itemRow.querySelector('.product-search');
+        const hint = itemRow.querySelector('.product-hint');
+        if (hidden) hidden.value = '';
+        if (input) {
+            delete input.dataset.selectedLabel;
+            input.classList.remove('input-error');
+        }
+        if (hint) hint.textContent = '';
+    }
+
+    // A suggestion was tapped: stamp its id on the row and show its label.
+    document.addEventListener('click', function (e) {
+        const picked = e.target.closest ? e.target.closest('.product-result') : null;
+        if (!picked) return;
+        const itemRow = picked.closest('.item-row');
+        if (!itemRow) return;
+
+        const hidden = itemRow.querySelector('.product-id');
+        const input = itemRow.querySelector('.product-search');
+        const hint = itemRow.querySelector('.product-hint');
+
+        if (hidden) hidden.value = picked.dataset.id || '';
+        if (input) {
+            input.value = picked.dataset.label || '';
+            input.dataset.selectedLabel = picked.dataset.label || '';
+            input.classList.remove('input-error');
+        }
+        if (hint) hint.textContent = picked.dataset.priceLabel || '';
+        closeBox(boxFor(input));
+    });
+
+    // htmx swaps suggestions into the row; reveal the box when it has rows.
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+        const box = e.target;
+        if (!box || !box.classList || !box.classList.contains('product-results')) return;
+        box.classList.toggle('hidden', box.textContent.trim().length === 0);
+    });
+
+    // Typing over a chosen product invalidates the choice.
+    document.addEventListener('input', function (e) {
+        const input = e.target.closest ? e.target.closest('.product-search') : null;
+        if (!input) return;
+        if (input.dataset.selectedLabel && input.value !== input.dataset.selectedLabel) {
+            clearSelection(input.closest('.item-row'));
+        }
+    });
+
+    // Tap anywhere else to dismiss an open list.
+    document.addEventListener('click', function (e) {
+        if (e.target.closest && (e.target.closest('.product-search') || e.target.closest('.product-results'))) {
+            return;
+        }
+        document.querySelectorAll('.product-results').forEach(closeBox);
+    });
+
+    // Every row must carry a real product id before the form is submitted.
+    const form = document.getElementById('order-form');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            let missing = false;
+            document.querySelectorAll('.item-row').forEach(function (row) {
+                const hidden = row.querySelector('.product-id');
+                const input = row.querySelector('.product-search');
+                if (!hidden || !input) return;
+                if (hidden.value) {
+                    input.classList.remove('input-error');
+                } else {
+                    missing = true;
+                    input.classList.add('input-error');
+                }
+            });
+            if (missing) {
+                e.preventDefault();
+                toast('Pick each product from the list', 'error');
+            }
+        });
+    }
+})();
 
 {% if not is_edit %}
 (function () {
-    const customerSelect = document.getElementById('customer_id');
+    const hiddenId = document.getElementById('customer_id');
+    const searchInput = document.getElementById('customer-search');
+    const resultsBox = document.getElementById('customer-results');
+    const selectedLabel = document.getElementById('customer-selected');
     const deliveryType = document.getElementById('delivery_type');
     const addressField = document.getElementById('delivery_address');
     const addressWrap = document.getElementById('delivery_address_wrap');
 
-    function selectedCustomer() {
-        const opt = customerSelect.selectedOptions[0];
-        if (!opt || !opt.value) return null;
+    // Data for the currently selected customer is stashed on the hidden input.
+    function currentCustomer() {
+        if (!hiddenId.value) return null;
         return {
-            defaultAddress: opt.dataset.defaultAddress || '',
-            suggestedType: opt.dataset.deliveryType || 'DELIVERY',
+            id: hiddenId.value,
+            name: hiddenId.dataset.name || '',
+            defaultAddress: hiddenId.dataset.defaultAddress || '',
+            suggestedType: hiddenId.dataset.deliveryType || 'DELIVERY',
         };
     }
 
     function syncAddressFromCustomer({ onlyIfDelivery = true } = {}) {
-        const c = selectedCustomer();
+        const c = currentCustomer();
         if (!c) return;
         if (onlyIfDelivery && deliveryType.value !== 'DELIVERY') return;
         if (!c.defaultAddress) return;
@@ -330,11 +432,62 @@ function addItemRow() {
         addressWrap.style.display = (deliveryType.value === 'DELIVERY') ? '' : 'none';
     }
 
-    customerSelect.addEventListener('change', () => {
-        const c = selectedCustomer();
-        if (c) deliveryType.value = c.suggestedType;
+    function selectCustomer({ id, name, phone, defaultAddress }) {
+        hiddenId.value = id;
+        hiddenId.dataset.name = name || '';
+        hiddenId.dataset.defaultAddress = defaultAddress || '';
+        hiddenId.dataset.deliveryType = defaultAddress ? 'DELIVERY' : 'PICKUP';
+        searchInput.value = `${name}${phone ? ' — ' + phone : ''}`;
+        if (selectedLabel) selectedLabel.textContent = `Selected: ${name}`;
+        hideResults();
+        deliveryType.value = defaultAddress ? 'DELIVERY' : 'PICKUP';
         syncAddressVisibility();
         syncAddressFromCustomer({ onlyIfDelivery: false });
+    }
+
+    function hideResults() {
+        resultsBox.classList.add('hidden');
+        resultsBox.innerHTML = '';
+    }
+
+    // Delegate clicks on rendered customer rows.
+
+    // Expose for the quick-add flow (defined below, outside this IIFE).
+    window.__selectCustomer = selectCustomer;
+    resultsBox.addEventListener('click', (e) => {
+        const row = e.target.closest('.customer-result');
+        if (!row) return;
+        const addrs = { id: row.dataset.id, name: row.dataset.name, phone: row.dataset.phone };
+        try {
+            const lines = JSON.parse(row.dataset.addrLines || '[]');
+            const defaults = JSON.parse(row.dataset.addrDefaults || '[]');
+            const idx = defaults.findIndex((d) => d === true);
+            addrs.defaultAddress = idx >= 0 ? lines[idx] : (lines[0] || '');
+        } catch (err) {
+            addrs.defaultAddress = '';
+        }
+        selectCustomer(addrs);
+    });
+
+    // HTMX swaps the results into the box; reveal it when there is content.
+    resultsBox.addEventListener('htmx:afterSwap', () => {
+        const hasContent = resultsBox.textContent.trim().length > 0;
+        resultsBox.classList.toggle('hidden', !hasContent);
+    });
+
+    // Clear the selected customer if the user edits the text after selecting.
+    searchInput.addEventListener('input', () => {
+        if (hiddenId.dataset.name && !searchInput.value.includes(hiddenId.dataset.name)) {
+            hiddenId.value = '';
+            hiddenId.dataset.name = '';
+            hiddenId.dataset.defaultAddress = '';
+            if (selectedLabel) selectedLabel.textContent = '';
+        }
+    });
+
+    // Close results when clicking outside.
+    document.addEventListener('click', (e) => {
+        if (!resultsBox.contains(e.target) && e.target !== searchInput) hideResults();
     });
 
     deliveryType.addEventListener('change', () => {
@@ -342,8 +495,15 @@ function addItemRow() {
         if (deliveryType.value === 'DELIVERY') syncAddressFromCustomer();
     });
 
+    // On load: if a customer is already selected (repeat-order / validation
+    // re-render), hydrate the visible fields from the hidden input.
+    if (hiddenId.value) {
+        if (selectedLabel && hiddenId.dataset.name) {
+            selectedLabel.textContent = `Selected: ${hiddenId.dataset.name}`;
+        }
+        syncAddressFromCustomer({ onlyIfDelivery: false });
+    }
     syncAddressVisibility();
-    syncAddressFromCustomer({ onlyIfDelivery: false });
 })();
 
 function openQuickAdd() {
@@ -369,15 +529,10 @@ async function submitQuickAdd() {
             return;
         }
         const sel = document.getElementById('customer_id');
-        const opt = document.createElement('option');
-        opt.value = data.customer.id;
-        opt.textContent = `${data.customer.name} — ${data.customer.phone}`;
-        opt.dataset.defaultAddress = data.customer.default_address || '';
-        opt.dataset.deliveryType = data.customer.default_address ? 'DELIVERY' : 'PICKUP';
-        sel.appendChild(opt);
-        sel.value = data.customer.id;
-        sel.dispatchEvent(new Event('change'));
-        closeQuickAdd();
+        // Reuse the typeahead's selection routine so address autofill still works.
+        if (typeof window.__selectCustomer === 'function') {
+            window.__selectCustomer(data.customer);
+        }
         toast(`Added ${data.customer.name}`, 'success');
     } catch (e) {
         toast('Network error', 'error');

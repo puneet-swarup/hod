@@ -149,7 +149,7 @@
 
                 <div class="flex flex-wrap gap-2 mb-3">
                     <span class="badge {{ order.status_badge_class }}">{{ order.status.value.replace('_', ' ') }}</span>
-                    <span class="badge {{ order.payment_badge_class }}">{{ order.payment_label }}</span>
+                    <span class="badge {{ order.payment_badge_class }}">Payment: {{ order.payment_label }}</span>
                 </div>
                 <p class="text-xs text-base-content/50 mb-3">
                     Fulfillment and payment are tracked separately.
@@ -160,8 +160,7 @@
                     'INQUIRY':     'CONFIRMED',
                     'CONFIRMED':   'IN_PROGRESS',
                     'IN_PROGRESS': 'READY',
-                    'READY':       'DELIVERED',
-                    'DELIVERED':   'PAID'
+                    'READY':       'DELIVERED'
                 }.get(st) %}
 
                 {% if next_primary %}
@@ -210,9 +209,20 @@
                 {% endif %}
 
                 {% else %}
+                {% if st == 'DELIVERED' and order.balance_due > 0 %}
+                <p class="text-sm text-warning">
+                    Delivered, but {{ order.balance_due|money }} is still outstanding.
+                    Record the balance payment in the Money panel.
+                </p>
+                {% elif st == 'DELIVERED' %}
+                <p class="text-sm text-success">
+                    Delivered and fully paid. This order is complete.
+                </p>
+                {% else %}
                 <p class="text-sm text-base-content/50">
                     No further transitions — this order is in a terminal state.
                 </p>
+                {% endif %}
                 {% endif %}
             </div>
         </div>

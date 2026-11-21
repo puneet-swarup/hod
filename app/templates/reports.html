@@ -80,7 +80,7 @@
                         <tr class="hover">
                             <td class="font-semibold">{{ r.period_label }}</td>
                             <td class="text-sm text-base-content/60">
-                                {{ r.generated_at.strftime('%d %b %Y, %H:%M') }}
+                                {{ r.generated_at|dt }}
                             </td>
                             <td>
                                 <div class="flex gap-1 justify-end flex-wrap">

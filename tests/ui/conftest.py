@@ -215,4 +215,60 @@ def app_page(browser, live_server):
     page.set_default_timeout(10000)
     page.goto(live_server + "/")
     yield page
-    context.close()
+
+
+# ---------------------------------------------------------------
+# Shared UI actions
+# ---------------------------------------------------------------
+
+
+@pytest.fixture()
+def select_customer():
+    """Return a callable that picks a customer via the order-form typeahead.
+
+    Types the name into the search box, waits for the HTMX-filtered
+    result list, and clicks the matching row. This exercises the real
+    search path instead of the old static <select>.
+    """
+
+    def _select(page, name: str) -> None:
+        # Use per-character typing so real keyup events fire — the form's
+        # hx-trigger is "keyup changed delay:300ms", which fill() does not
+        # trigger (fill sets the value and fires only an input event).
+        box = page.locator("#customer-search")
+        box.click()
+        box.press_sequentially(name, delay=30)
+        page.wait_for_selector(".customer-result", timeout=8000)
+        page.click(f'.customer-result:has-text("{name}")')
+        page.wait_for_function(
+            "document.getElementById('customer_id').value !== ''",
+            timeout=5000,
+        )
+
+    return _select
+
+
+@pytest.fixture()
+def select_product():
+    """Return a callable that picks a product via the order-form type-ahead.
+
+    Types into the item row's search box, waits for the HTMX-filtered
+    suggestion list and clicks the first match — the real search path,
+    not the old static <select>.
+    """
+
+    def _select(page, name: str, row_index: int = 0) -> None:
+        row = page.locator(".item-row").nth(row_index)
+        box = row.locator(".product-search")
+        box.click()
+        # Per-character typing so the "keyup changed" trigger fires.
+        box.press_sequentially(name, delay=30)
+        row.locator(".product-result").first.wait_for(state="visible", timeout=8000)
+        row.locator(".product-result").first.click()
+        page.wait_for_function(
+            "document.querySelectorAll('.item-row')[" + str(row_index) + "]"
+            ".querySelector('.product-id').value !== ''",
+            timeout=5000,
+        )
+
+    return _select

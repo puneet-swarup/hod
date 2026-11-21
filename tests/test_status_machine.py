@@ -35,12 +35,13 @@ def test_illegal_transition_rejected(db, customer, product):
     assert ei.value.status_code == 400
 
 
-def test_paid_is_terminal(db, customer, product):
+def test_delivered_is_terminal(db, customer, product):
     o = _new_order(db, customer, product)
     o = update_status(db, o.id, "IN_PROGRESS")
     o = update_status(db, o.id, "READY")
     o = update_status(db, o.id, "DELIVERED")
-    o = update_status(db, o.id, "PAID")
+    # DELIVERED is the success terminal state; payment is a separate axis.
+    assert o.status == OrderStatus.DELIVERED
     with pytest.raises(HTTPException):
         update_status(db, o.id, "INQUIRY")
 

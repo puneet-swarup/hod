@@ -24,10 +24,11 @@ the private network.
 ## What it does
 
 **Orders and customers**
-- Full lifecycle: INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED → PAID, or CANCELLED
+- Full lifecycle: INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED, or CANCELLED — payment tracked as a separate axis
 - Edit while CONFIRMED, with audit trail and a floor guard against reducing below paid
-- Search by order number, customer name, or phone
+- Search by order number, customer name, or phone; customer and product fields are type-ahead pickers, not long dropdowns
 - Today page: dispatch list (orders fulfilling today, sorted by time) + production needs aggregated by SKU across the next 7 days
+- Production keeps late work visible: orders past their fulfillment date stay in an **Overdue** bucket until they are delivered or cancelled, and every row shows the earliest fulfillment date and time
 
 **Products and recipes**
 - SKU auto-generated from name + weight + pack, editable, live uniqueness check

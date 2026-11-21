@@ -2,7 +2,7 @@
 Order routes. HTTP only; business logic in order_service.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -11,12 +11,13 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Customer, OrderStatus, Product
 from app.services import invoice_service, order_service
+from app.utils.time import business_now
 
 router = APIRouter()
 
 
 def _default_fulfillment() -> str:
-    tomorrow_noon = (datetime.now() + timedelta(days=1)).replace(
+    tomorrow_noon = (business_now() + timedelta(days=1)).replace(
         hour=12, minute=0, second=0, microsecond=0
     )
     return tomorrow_noon.strftime("%Y-%m-%dT%H:%M")
@@ -117,7 +118,7 @@ def new_order_form(
             "settings": settings,
             "customers": customers,
             "products": products,
-            "today_date": datetime.now().strftime("%Y-%m-%d"),
+            "today_date": business_now().strftime("%Y-%m-%d"),
             "default_fulfillment": _default_fulfillment(),
             "mode": "create",
             "form_action": "/orders/",
@@ -174,7 +175,7 @@ def create_order(
                 "settings": settings,
                 "customers": customers,
                 "products": products,
-                "today_date": datetime.now().strftime("%Y-%m-%d"),
+                "today_date": business_now().strftime("%Y-%m-%d"),
                 "default_fulfillment": _default_fulfillment(),
                 "mode": "create",
                 "form_action": "/orders/",
@@ -207,7 +208,7 @@ def edit_order_form(request: Request, order_id: int, db: Session = Depends(get_d
             "settings": settings,
             "customers": customers,
             "products": products,
-            "today_date": datetime.now().strftime("%Y-%m-%d"),
+            "today_date": business_now().strftime("%Y-%m-%d"),
             "default_fulfillment": _default_fulfillment(),
             "mode": "edit",
             "form_action": f"/orders/{order_id}/edit",
@@ -259,7 +260,7 @@ def update_order(
                 "settings": settings,
                 "customers": customers,
                 "products": products,
-                "today_date": datetime.now().strftime("%Y-%m-%d"),
+                "today_date": business_now().strftime("%Y-%m-%d"),
                 "default_fulfillment": _default_fulfillment(),
                 "mode": "edit",
                 "form_action": f"/orders/{order_id}/edit",

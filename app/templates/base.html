@@ -188,7 +188,18 @@
         if (typeof toast === 'function') toast('Network error', 'error');
     });
 
-    // Register the service worker (required for Android install prompt).
+    // Back/forward cache (bfcache) guard.
+    // Chrome can restore a previous page from bfcache (event.persisted === true)
+    // without re-fetching it — even when the response sent no-store. That made
+    // the orders list show a stale payment/status badge after you recorded a
+    // payment on the detail page and navigated back. Reload so the data is fresh.
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+            window.location.reload();
+        }
+    });
+
+    // Also refresh when the tab becomes visible again, covering browsers that
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/sw.js').catch(() => {

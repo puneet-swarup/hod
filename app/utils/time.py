@@ -21,6 +21,18 @@ def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def business_now() -> datetime:
+    """Current time in the business timezone (aware).
+
+    Use this for any user-facing computation of "now" — default dates,
+    report timestamps, numbering year — so the app is independent of the
+    server's own timezone. Never store the result directly: convert with
+    ``utcnow()``/``to_business_tz`` per the storage policy above.
+    """
+    settings = get_settings()
+    return datetime.now(ZoneInfo(settings.business_timezone))
+
+
 def to_business_tz(dt: datetime | None) -> datetime | None:
     """Convert a stored naive-UTC datetime to business tz for display."""
     if dt is None:

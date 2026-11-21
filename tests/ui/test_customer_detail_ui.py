@@ -8,12 +8,12 @@ from playwright.sync_api import expect
 from app.config import get_settings
 
 
-def _create_order_for(app_page, live_server, seeded):
+def _create_order_for(app_page, live_server, seeded, select_customer):
     tz = ZoneInfo(get_settings().business_timezone)
     dt = (datetime.now(tz) + timedelta(days=1)).strftime("%Y-%m-%dT12:00")
 
     app_page.goto(live_server + "/orders/new")
-    app_page.select_option("#customer_id", str(seeded["customer_id"]))
+    select_customer(app_page, seeded["customer_name"])
     app_page.fill('input[name="fulfillment_date"]', dt)
     app_page.select_option('select[name="product_id"]', str(seeded["product_id"]))
     app_page.fill('input[name="quantity"]', "1")
@@ -30,9 +30,9 @@ def test_customer_detail_shows_stat_cards(app_page, seeded, live_server):
     expect(app_page.locator("text=Avg order")).to_be_visible()
 
 
-def test_customer_stats_update_after_order(app_page, seeded, live_server):
+def test_customer_stats_update_after_order(app_page, seeded, live_server, select_customer):
     # Create an order for this customer
-    _create_order_for(app_page, live_server, seeded)
+    _create_order_for(app_page, live_server, seeded, select_customer)
 
     # Visit customer detail
     app_page.goto(live_server + f"/customers/{seeded['customer_id']}")

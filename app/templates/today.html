@@ -127,8 +127,7 @@
                                         'INQUIRY': 'CONFIRMED',
                                         'CONFIRMED': 'IN_PROGRESS',
                                         'IN_PROGRESS': 'READY',
-                                        'READY': 'DELIVERED',
-                                        'DELIVERED': 'PAID'
+                                        'READY': 'DELIVERED'
                                     }.get(order.status.value) %}
                                     {% if next_status %}
                                     <form hx-post="/orders/{{ order.id }}/status"
@@ -159,7 +158,7 @@
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body space-y-4">
             <div class="flex justify-between items-center">
-                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Production — Next 7 Days</h2>
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Production — Overdue &amp; Next 7 Days</h2>
                 <span class="badge badge-ghost">{{ production.total_units }} unit{{ '' if production.total_units == 1 else 's' }}</span>
             </div>
 
@@ -171,17 +170,17 @@
                         <table class="table table-sm">
                             <thead>
                                 <tr class="text-base-content/60">
-                                    <th>SKU</th>
+                                    <th class="hidden sm:table-cell">SKU</th>
                                     <th>Item</th>
                                     <th class="text-right">Qty</th>
-                                    <th class="hidden sm:table-cell text-right">From</th>
-                                    <th class="text-right">Prep</th>
+                                    <th class="text-right">Fulfillment</th>
+                                    <th class="hidden sm:table-cell text-right">Prep</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for row in rows %}
                                 <tr class="hover">
-                                    <td class="font-mono text-xs">{{ row.sku }}</td>
+                                    <td class="hidden sm:table-cell font-mono text-xs">{{ row.sku }}</td>
                                     <td>
                                         <div class="text-sm font-medium">{{ row.name }}</div>
                                         <div class="text-xs text-base-content/50">
@@ -189,10 +188,15 @@
                                         </div>
                                     </td>
                                     <td class="text-right font-bold">{{ row.qty }}</td>
-                                    <td class="hidden sm:table-cell text-right text-xs text-base-content/60">
-                                        {{ row.order_count }} order{{ '' if row.order_count == 1 else 's' }}
+                                    <td class="text-right text-xs text-base-content/60 whitespace-nowrap">
+                                        <div class="font-mono text-base-content/80">
+                                            {{ row.earliest.strftime('%d %b, %H:%M') }}
+                                        </div>
+                                        <div class="text-base-content/40">
+                                            {{ row.order_count }} order{{ '' if row.order_count == 1 else 's' }}
+                                        </div>
                                     </td>
-                                    <td class="text-right text-xs">{{ row.prep_hours }}h</td>
+                                    <td class="hidden sm:table-cell text-right text-xs">{{ row.prep_hours }}h</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -202,7 +206,8 @@
                 {% endif %}
             {% endmacro %}
 
-            {% if production.urgent or production.tomorrow or production.later %}
+            {% if production.overdue or production.urgent or production.tomorrow or production.later %}
+                {{ bucket("Overdue — fulfillment date has passed", production.overdue, "text-error") }}
                 {{ bucket("Urgent — fulfilling today", production.urgent, "text-error") }}
                 {{ bucket("Tomorrow", production.tomorrow, "text-warning") }}
                 {{ bucket("Later this week", production.later, "text-base-content/60") }}

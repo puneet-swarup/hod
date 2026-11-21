@@ -109,3 +109,102 @@ def test_production_respects_7_day_horizon(db, customer, product):
 
     prod = production_this_week(db)
     assert prod["total_units"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Overdue orders (regression: past-due work vanished from the production list)
+# ---------------------------------------------------------------------------
+
+
+def test_production_shows_overdue_orders(db, customer, product):
+    """An order whose date has passed and was never delivered must stay
+    visible in production, in its own bucket."""
+    today_start, _ = business_today_bounds_utc()
+    yesterday_noon = today_start + timedelta(hours=6) - timedelta(days=1)
+
+    _mk_order(db, customer, product, 4, yesterday_noon)
+
+    prod = production_this_week(db)
+    assert len(prod["overdue"]) == 1
+    assert prod["overdue"][0]["qty"] == 4
+    assert prod["urgent"] == []
+    assert prod["later"] == []
+    assert prod["total_units"] == 4
+
+
+def test_overdue_bucket_excludes_delivered_orders(db, customer, product):
+    today_start, _ = business_today_bounds_utc()
+    yesterday_noon = today_start + timedelta(hours=6) - timedelta(days=1)
+
+    o = _mk_order(db, customer, product, 1, yesterday_noon)
+    update_status(db, o.id, "IN_PROGRESS")
+    update_status(db, o.id, "READY")
+    update_status(db, o.id, "DELIVERED")
+
+    prod = production_this_week(db)
+    assert prod["overdue"] == []
+    assert prod["total_units"] == 0
+
+
+def test_overdue_bucket_excludes_cancelled_orders(db, customer, product):
+    today_start, _ = business_today_bounds_utc()
+    yesterday_noon = today_start + timedelta(hours=6) - timedelta(days=1)
+
+    o = _mk_order(db, customer, product, 1, yesterday_noon)
+    update_status(db, o.id, "CANCELLED")
+
+    prod = production_this_week(db)
+    assert prod["overdue"] == []
+    assert prod["total_units"] == 0
+
+
+def test_overdue_keeps_in_progress_orders(db, customer, product):
+    """Started but not finished is exactly the case that must not disappear."""
+    today_start, _ = business_today_bounds_utc()
+    yesterday_noon = today_start + timedelta(hours=6) - timedelta(days=1)
+
+    o = _mk_order(db, customer, product, 2, yesterday_noon)
+    update_status(db, o.id, "IN_PROGRESS")
+
+    prod = production_this_week(db)
+    assert len(prod["overdue"]) == 1
+    assert prod["overdue"][0]["qty"] == 2
+
+
+def test_overdue_carries_the_past_fulfillment_timestamp(db, customer, product):
+    """The row must expose when it was actually due, for display."""
+    today_start, _ = business_today_bounds_utc()
+    due = today_start + timedelta(hours=6) - timedelta(days=2)
+
+    _mk_order(db, customer, product, 1, due)
+
+    prod = production_this_week(db)
+    assert prod["overdue"][0]["earliest"] == due
+
+
+def test_production_row_earliest_is_the_fulfillment_datetime(db, customer, product):
+    """Requirement: the production list shows the timestamp, not just a count."""
+    today_start, _ = business_today_bounds_utc()
+    noon = today_start + timedelta(hours=6)
+    evening = noon + timedelta(hours=5)
+
+    _mk_order(db, customer, product, 1, evening)
+    _mk_order(db, customer, product, 1, noon)
+
+    row = production_this_week(db)["urgent"][0]
+    assert row["earliest"] == noon
+    assert row["order_count"] == 2
+
+
+def test_overdue_row_shows_the_oldest_due_date(db, customer, product):
+    """Same SKU, two late orders: the row reports the most overdue date."""
+    today_start, _ = business_today_bounds_utc()
+    base = today_start + timedelta(hours=6)
+    older = base - timedelta(days=5)
+    _mk_order(db, customer, product, 1, base - timedelta(days=1))
+    _mk_order(db, customer, product, 1, older)
+
+    prod = production_this_week(db)
+    assert len(prod["overdue"]) == 1
+    assert prod["overdue"][0]["earliest"] == older
+    assert prod["overdue"][0]["order_count"] == 2

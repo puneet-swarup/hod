@@ -98,13 +98,24 @@ def test_full_payment_clears_balance_without_auto_status(db_session, sample_orde
 
 
 def test_settle_requires_delivered(db_session, sample_order):
-    """Cannot jump to PAID from CONFIRMED — must complete delivery first."""
+    """PAID is no longer a fulfillment status — it is rejected."""
     from fastapi import HTTPException
 
     from app.services.order_service import update_status
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(HTTPException) as ei:
         update_status(db_session, sample_order.id, "PAID")
+    assert ei.value.status_code == 400
+
+
+def test_delivered_is_terminal_fulfillment(db_session, sample_order):
+    """DELIVERED ends the workflow; there is no further fulfillment step."""
+    from app.services.order_service import update_status
+
+    for status in ("IN_PROGRESS", "READY", "DELIVERED"):
+        sample_order = update_status(db_session, sample_order.id, status)
+    assert sample_order.status == OrderStatus.DELIVERED
+    assert sample_order.allowed_next_statuses == []
 
 
 def test_partial_payment_reduces_balance(client, db_session, sample_order):

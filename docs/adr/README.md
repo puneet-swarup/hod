@@ -25,4 +25,5 @@ We use the **Nygard template**: Status → Context → Decision → Consequences
 | [0011](0011-soft-delete-strategy.md) | Soft Delete for All Entities | Accepted | 2026-09-22 |
 | [0012](0012-multi-address-model.md) | Multi-Address per Customer | Accepted | 2026-09-22 |
 | [0013](0013-navbar-only-navigation.md) | Navbar-Only Navigation (No Drawer) | Accepted | 2026-09-22 |
-| [0014](0014-local-time-over-utc.md) | Local Time (IST) Over UTC | Accepted | 2026-09-22 |
+| [0014](0014-local-time-over-utc.md) | Local Time (IST) Over UTC | Superseded by 0015 | 2026-09-22 |
+| [0015](0015-store-utc-display-ist.md) | Store UTC, Display in the Business Timezone | Accepted | 2026-11-21 |

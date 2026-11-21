@@ -65,10 +65,16 @@ def production_this_week(db: Session, days: int = 7) -> dict:
         if not order.fulfillment_date:
             continue
         fdate = order.fulfillment_date.date()
-        if fdate < today or fdate >= horizon:
+        if fdate >= horizon:
             continue
 
-        if fdate == today:
+        # An order whose fulfillment date has passed but which is still
+        # CONFIRMED / IN_PROGRESS is not finished work — it is late work.
+        # It must stay in the production list until it is baked, delivered
+        # or cancelled, so it gets its own bucket instead of being dropped.
+        if fdate < today:
+            bucket = "overdue"
+        elif fdate == today:
             bucket = "urgent"
         elif fdate == tomorrow:
             bucket = "tomorrow"
@@ -102,15 +108,17 @@ def production_this_week(db: Session, days: int = 7) -> dict:
             key=lambda r: r["earliest"],
         )
 
+    overdue = _sorted("overdue")
     urgent = _sorted("urgent")
     tomorrow_rows = _sorted("tomorrow")
     later = _sorted("later")
 
     return {
+        "overdue": overdue,
         "urgent": urgent,
         "tomorrow": tomorrow_rows,
         "later": later,
-        "total_units": sum(r["qty"] for r in urgent + tomorrow_rows + later),
+        "total_units": sum(r["qty"] for r in overdue + urgent + tomorrow_rows + later),
     }
 
 

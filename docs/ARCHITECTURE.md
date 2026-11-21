@@ -114,14 +114,18 @@ not against UTC bounds.
 **Two independent state machines.**
 
 `Order.status` tracks fulfillment: INQUIRY → CONFIRMED → IN_PROGRESS →
-READY → DELIVERED → PAID (or CANCELLED).
+READY → DELIVERED, with CANCELLED as the failure terminal. **DELIVERED is
+the success terminal state** — there is no `PAID` fulfillment status.
 
 Payment is tracked by two numbers (`advance_paid`, `balance_due`) and a
 computed `payment_state` property (`paid` / `partial` / `unpaid`).
 
 Recording a payment never changes fulfillment status. Moving fulfillment
 forward never changes payment state. Both are shown as separate badges
-wherever an order appears.
+wherever an order appears, and the payment badge is labelled `Payment: …`
+so it can never be confused with the fulfillment badge. A `DELIVERED` order
+with an outstanding balance is a normal, meaningful state: the goods are
+with the customer, the money is not yet in.
 
 ## Auto-deduction on production start
 

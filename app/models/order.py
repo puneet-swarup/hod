@@ -26,21 +26,19 @@ class OrderStatus(str, enum.Enum):
     IN_PROGRESS = "IN_PROGRESS"
     READY = "READY"
     DELIVERED = "DELIVERED"
-    PAID = "PAID"
     CANCELLED = "CANCELLED"
 
 
-# Fulfillment workflow only. PAID is a terminal state reached after
-# DELIVERED — it does NOT mean "settled early". Payments never auto-set
-# status. To settle a fully-paid-but-not-delivered order, complete the
-# fulfillment first.
+# Fulfillment workflow only. The terminal states are DELIVERED (success)
+# and CANCELLED (failure). Whether the customer has paid is a SEPARATE
+# axis, tracked by Order.payment_state and the payment ledger. Payments
+# never change fulfillment status, and fulfillment never encodes payment.
 ALLOWED_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
     OrderStatus.INQUIRY: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
     OrderStatus.CONFIRMED: {OrderStatus.IN_PROGRESS, OrderStatus.CANCELLED},
     OrderStatus.IN_PROGRESS: {OrderStatus.READY, OrderStatus.CANCELLED},
     OrderStatus.READY: {OrderStatus.DELIVERED, OrderStatus.CANCELLED},
-    OrderStatus.DELIVERED: {OrderStatus.PAID},
-    OrderStatus.PAID: set(),
+    OrderStatus.DELIVERED: set(),
     OrderStatus.CANCELLED: set(),
 }
 
@@ -133,8 +131,7 @@ class Order(Base):
             "INQUIRY": "badge-ghost",
             "CONFIRMED": "badge-info",
             "IN_PROGRESS": "badge-warning",
-            "READY": "badge-success",
-            "DELIVERED": "badge-primary",
+            "DELIVERED": "badge-success",
             "PAID": "badge-success",
             "CANCELLED": "badge-error",
         }.get(self.status.value, "badge-ghost")

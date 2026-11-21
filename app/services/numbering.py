@@ -11,18 +11,17 @@ Concurrency:
   or a subsequent unique constraint. Callers should retry once.
 """
 
-from datetime import datetime
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models.number_sequence import NumberSequence
+from app.utils.time import business_now
 
 
 def _prefix(kind: str) -> str:
     settings = get_settings()
-    year = datetime.now().year
+    year = business_now().year
     return f"{settings.invoice_prefix}-{year}-{kind}"
 
 
@@ -52,5 +51,5 @@ def _next(db: Session, kind: str) -> str:
     # human-readable number, matching v0.1 behaviour).
     seq = row.last_value
     settings = get_settings()
-    year = datetime.now().year
+    year = business_now().year
     return f"{settings.invoice_prefix}-{year}-{seq:04d}"
