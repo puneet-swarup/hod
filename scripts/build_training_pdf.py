@@ -39,6 +39,7 @@ OUTPUT = TRAINING / "House-of-Desserts-Training-Manual.pdf"
 
 # Order matters: this is the reading order of the printed manual.
 GUIDES = [
+    ("screen-tour.md", "Screen tour: every tab in the app"),
     ("retail-orders.md", "Retail: customers and orders"),
     ("products-and-inventory.md", "Products, recipes and inventory"),
     ("b2b-partners.md", "Selling to shops and franchisees"),

@@ -8,6 +8,7 @@ to remember how a screen works six months from now.
 | Module | Covers | Where |
 |---|---|---|
 | **Whole app, screen by screen** | Every screen, field and rule — the reference manual | [`../USER_MANUAL.md`](../USER_MANUAL.md) |
+| **Screen tour** | Every tab and screen in the app, one picture each — the map for a first day | [`screen-tour.md`](screen-tour.md) |
 | **Retail: customers and orders** | Type-ahead pickers, the status flow, payments, invoices, editing | [`retail-orders.md`](retail-orders.md) |
 | **Products, recipes and inventory** | SKUs, recipes and cost, stock ledger, capacity | [`products-and-inventory.md`](products-and-inventory.md) |
 | **Selling to shops and franchisees** | Partners, contracts, price lists, B2B orders, credit, statements | [`b2b-partners.md`](b2b-partners.md) |
@@ -16,7 +17,7 @@ to remember how a screen works six months from now.
 
 ### The printed manual
 
-All five guides are also available as one PDF, with a cover and contents
+All six guides are also available as one PDF, with a cover and contents
 page, for printing or handing to a new person:
 
 **[House-of-Desserts-Training-Manual.pdf](House-of-Desserts-Training-Manual.pdf)** — 38 pages, A4.
