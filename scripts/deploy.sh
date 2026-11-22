@@ -446,7 +446,20 @@ if [ "$ACTION" = "rollback" ]; then
   . "$STATE_FILE"
   PREV_SHA="${LAST_PREV_SHA:-}"
   BACKUP_FILE="${LAST_BACKUP:-}"
-  [ -n "$PREV_SHA" ] || die "The last deployment did not record a previous version."
+
+  if [ -z "$PREV_SHA" ]; then
+    die "The last deployment did not change the code — it only brought the
+  database up to date. Undoing it would restore the OLD database while
+  leaving the NEW code in place, which breaks every page.
+
+  If that is really what you want, do it by hand:
+    cd $APP_DIR
+    sudo systemctl stop $SERVICE
+    cp $BACKUP_FILE $DATA_DIR/bakery.db
+    git reset --hard <the version you want>
+    sudo systemctl start $SERVICE"
+  fi
+
   rollback "you asked to undo the last deployment"
 fi
 
@@ -598,8 +611,17 @@ if [ -n "$FAILED_AT" ]; then
 fi
 
 # --- 7. Remember what happened, for --rollback ------------------------------
+# Record a previous version only when the code actually moved. A
+# schema-only repair has nothing to roll the code back to, and --rollback
+# must refuse rather than restore an old database under new code.
+if [ "$PREV_SHA" = "$(git rev-parse HEAD 2>/dev/null)" ]; then
+  RECORD_PREV=""
+else
+  RECORD_PREV="$PREV_SHA"
+fi
+
 cat > "$STATE_FILE" <<EOF
-LAST_PREV_SHA=$PREV_SHA
+LAST_PREV_SHA=$RECORD_PREV
 LAST_NEW_SHA=$NEW_SHA
 LAST_BACKUP=$BACKUP_FILE
 LAST_DEPLOYED_AT=$(date -Iseconds)
@@ -610,7 +632,11 @@ printf '\n'
 hr
 printf '%s  ✓ DEPLOYED SUCCESSFULLY%s\n' "$BOLD$GREEN" "$OFF"
 hr
-say "  Version:  $(git rev-parse --short HEAD)   (was $(git rev-parse --short "$PREV_SHA"))"
+if [ "$PREV_SHA" = "$(git rev-parse HEAD)" ]; then
+  say "  Version:  $(git rev-parse --short HEAD)   (code was already at this version)"
+else
+  say "  Version:  $(git rev-parse --short HEAD)   (was $(git rev-parse --short "$PREV_SHA"))"
+fi
 say "  Backup:   $BACKUP_FILE"
 say "  Time:     ${SECONDS}s"
 say ""
