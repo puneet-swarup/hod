@@ -2,7 +2,8 @@
 """
 Nightly backup for House of Desserts.
 
-Backs up ~/hod-data/ to ~/hod-backups/YYYY-MM-DD/:
+Backs up the data directory to BACKUP_DIR/YYYY-MM-DD/ (both paths come
+from .env, so the same script works on a server, a laptop or a test rig):
   - bakery.db   via SQLite's .backup() API (safe during writes)
   - everything else via plain file copy (invoices, reports)
 
@@ -106,7 +107,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Back up HOD data")
     parser.add_argument(
         "--env",
-        default=str(Path.home() / "house-of-desserts" / ".env"),
+        # Default to the .env beside this script's repository, so the tool
+        # works wherever the app is checked out — not only at
+        # ~/house-of-desserts on the production host.
+        default=str(
+            (Path(__file__).resolve().parent.parent / ".env")
+            if (Path(__file__).resolve().parent.parent / ".env").exists()
+            else (Path.home() / "house-of-desserts" / ".env")
+        ),
         help="Path to .env file",
     )
     parser.add_argument(
