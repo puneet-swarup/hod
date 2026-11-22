@@ -8,28 +8,28 @@ from playwright.sync_api import expect
 from app.config import get_settings
 
 
-def _create_order_for(app_page, live_server, seeded, select_customer, qty="2"):
+def _create_order_for(app_page, live_server, seeded, select_customer, select_product, qty="2"):
     tz = ZoneInfo(get_settings().business_timezone)
     dt = (datetime.now(tz) + timedelta(days=1)).strftime("%Y-%m-%dT12:00")
 
     app_page.goto(live_server + "/orders/new")
     select_customer(app_page, seeded["customer_name"])
     app_page.fill('input[name="fulfillment_date"]', dt)
-    app_page.select_option('select[name="product_id"]', str(seeded["product_id"]))
+    select_product(app_page, seeded["product_name"])
     app_page.fill('input[name="quantity"]', qty)
     app_page.click('button[type="submit"]')
     expect(app_page.locator("h2:has-text('Payments')")).to_be_visible(timeout=10000)
 
 
-def test_repeat_button_visible_on_customer_history(app_page, seeded, live_server, select_customer):
-    _create_order_for(app_page, live_server, seeded, select_customer)
+def test_repeat_button_visible_on_customer_history(app_page, seeded, live_server, select_customer, select_product):
+    _create_order_for(app_page, live_server, seeded, select_customer, select_product)
 
     app_page.goto(live_server + f"/customers/{seeded['customer_id']}")
     expect(app_page.locator("a:has-text('Repeat')").first).to_be_visible(timeout=8000)
 
 
-def test_repeat_prefills_order_form(app_page, seeded, live_server, select_customer):
-    _create_order_for(app_page, live_server, seeded, select_customer, qty="3")
+def test_repeat_prefills_order_form(app_page, seeded, live_server, select_customer, select_product):
+    _create_order_for(app_page, live_server, seeded, select_customer, select_product, qty="3")
 
     app_page.goto(live_server + f"/customers/{seeded['customer_id']}")
     app_page.locator("a:has-text('Repeat')").first.click()

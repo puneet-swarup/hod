@@ -13,26 +13,26 @@ def _today_fulfillment() -> str:
     return datetime.now(tz).strftime("%Y-%m-%d") + "T15:00"
 
 
-def _create_order(app_page, live_server, seeded, select_customer):
+def _create_order(app_page, live_server, seeded, select_customer, select_product):
     app_page.goto(live_server + "/orders/new")
     select_customer(app_page, seeded["customer_name"])
     app_page.fill('input[name="fulfillment_date"]', _today_fulfillment())
-    app_page.select_option('select[name="product_id"]', str(seeded["product_id"]))
+    select_product(app_page, seeded["product_name"])
     app_page.fill('input[name="quantity"]', "1")
     app_page.click('button[type="submit"]')
     expect(app_page.locator("h2:has-text('Payments')")).to_be_visible(timeout=10000)
 
 
-def test_message_button_opens_modal(app_page, seeded, live_server, select_customer):
-    _create_order(app_page, live_server, seeded, select_customer)
+def test_message_button_opens_modal(app_page, seeded, live_server, select_customer, select_product):
+    _create_order(app_page, live_server, seeded, select_customer, select_product)
 
     app_page.click('button:has-text("Message Customer")')
     expect(app_page.locator("dialog#wa-modal")).to_be_visible(timeout=5000)
     expect(app_page.locator("#wa-text")).not_to_have_value("")
 
 
-def test_message_modal_preview_updates(app_page, seeded, live_server, select_customer):
-    _create_order(app_page, live_server, seeded, select_customer)
+def test_message_modal_preview_updates(app_page, seeded, live_server, select_customer, select_product):
+    _create_order(app_page, live_server, seeded, select_customer, select_product)
 
     app_page.click('button:has-text("Message Customer")')
     expect(app_page.locator("#wa-text")).to_be_visible()
@@ -45,9 +45,9 @@ def test_message_modal_preview_updates(app_page, seeded, live_server, select_cus
     assert first != second
 
 
-def test_message_button_available_on_list(app_page, seeded, live_server, select_customer):
+def test_message_button_available_on_list(app_page, seeded, live_server, select_customer, select_product):
     """After creating an order, the list page has a 💬 Message button."""
-    _create_order(app_page, live_server, seeded, select_customer)
+    _create_order(app_page, live_server, seeded, select_customer, select_product)
 
     app_page.goto(live_server + "/orders")
     expect(app_page.locator('button:has-text("💬 Message")').first).to_be_visible(timeout=8000)
@@ -59,10 +59,10 @@ def test_message_button_available_on_list(app_page, seeded, live_server, select_
 
 
 def test_message_modal_prefers_ready_after_status_change(
-    app_page, seeded, live_server, select_customer
+    app_page, seeded, live_server, select_customer, select_product
 ):
     """After marking READY, the 💬 button opens with 'Order is ready' preselected."""
-    _create_order(app_page, live_server, seeded, select_customer)
+    _create_order(app_page, live_server, seeded, select_customer, select_product)
 
     app_page.goto(live_server + "/orders")
 
