@@ -37,7 +37,13 @@ set -uo pipefail
 # The app folder is wherever this script lives, minus the scripts/ level —
 # so the same file works on the server, in a container, or in a test harness
 # without editing paths.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks, so the script can be linked into PATH (e.g.
+# /usr/local/bin/hod-deploy) and still find the app it belongs to.
+SELF="${BASH_SOURCE[0]}"
+if command -v readlink >/dev/null 2>&1; then
+  SELF="$(readlink -f "$SELF" 2>/dev/null || printf '%s' "$SELF")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SELF")" && pwd)"
 APP_DIR="${HOD_APP_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
 # Data and backup folders are read from .env below, because that is the one
