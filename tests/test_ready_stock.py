@@ -183,3 +183,83 @@ def test_the_order_picker_shows_what_is_ready(client, db, sample_product):
 
     body = client.get("/products/search", params={"q": sample_product.name}).text
     assert "4 ready" in body
+
+
+# ---------------------------------------------------------------------------
+# Cost follows the goods
+# ---------------------------------------------------------------------------
+
+
+def test_baking_records_the_recipe_cost_per_unit(db, sample_product):
+    flour = _ingredient(db, cost="0.10")
+    _recipe(db, sample_product, flour, per_unit="100")  # ₹10 per unit
+
+    ready_stock_service.bake(db, sample_product.id, 5)
+    db.commit()
+
+    rows = ready_stock_service.movements_for(db, sample_product.id)
+    production = [r for r in rows if r.reason == ProductMovementReason.PRODUCTION]
+    assert production[0].unit_cost == Decimal("10.00")
+
+
+def test_a_sale_from_stock_carries_the_cost_to_the_order(db, sample_customer, sample_product):
+    from app.services.order_service import order_cogs
+
+    flour = _ingredient(db, cost="0.10")
+    _recipe(db, sample_product, flour, per_unit="100")  # ₹10 a unit
+    ready_stock_service.bake(db, sample_product.id, 5)
+    db.commit()
+
+    order = _order(db, sample_customer, sample_product, qty=2)
+    order_service.update_status(db, order.id, "IN_PROGRESS")
+
+    # Two units × ₹10, and no ingredient consumption on the order itself.
+    assert order_cogs(db, order.id) == Decimal("20.00")
+
+
+def test_the_report_puts_the_cost_in_the_selling_month(db, sample_customer, sample_product):
+    from app.services import reports_service
+    from app.utils.time import business_now
+
+    flour = _ingredient(db, cost="0.10")
+    _recipe(db, sample_product, flour, per_unit="100")
+    ready_stock_service.bake(db, sample_product.id, 5)
+    db.commit()
+
+    order = _order(db, sample_customer, sample_product, qty=2)
+    order_service.update_status(db, order.id, "IN_PROGRESS")
+
+    now = business_now()
+    report = reports_service.build_report(db, now.year, now.month)
+    assert report["total_cogs"] == Decimal("20.00")
+
+
+def test_wastage_releases_cost_and_reduces_stock_value(db, sample_product):
+    flour = _ingredient(db, cost="0.10")
+    _recipe(db, sample_product, flour, per_unit="100")
+    ready_stock_service.bake(db, sample_product.id, 4)
+    db.commit()
+
+    before = ready_stock_service.stock_value(db)
+    ready_stock_service.adjust(db, sample_product.id, -2, ProductMovementReason.WASTAGE, "unsold")
+    db.commit()
+    after = ready_stock_service.stock_value(db)
+
+    assert after["units"] == before["units"] - 2
+    assert after["value"] < before["value"]
+
+
+def test_averaged_cost_holds_across_two_bakes_at_different_prices(db, sample_product):
+    cheap = _ingredient(db, name="Flour", cost="0.10")
+    _recipe(db, sample_product, cheap, per_unit="100")
+    ready_stock_service.bake(db, sample_product.id, 2)  # ₹10 a unit
+    db.commit()
+
+    # ingredient price rises, then bake again
+    cheap.cost_per_unit = Decimal("0.20")
+    db.commit()
+    ready_stock_service.bake(db, sample_product.id, 2)  # ₹20 a unit
+    db.commit()
+
+    # 2×10 + 2×20 = 60 over 4 units → ₹15
+    assert ready_stock_service.average_cost(db, sample_product.id) == Decimal("15.00")

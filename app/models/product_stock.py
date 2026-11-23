@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -61,6 +62,13 @@ class ProductStockMovement(Base):
     reference_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # What one unit was worth on this row. On a PRODUCTION row it is the
+    # recipe cost at bake time; on a SALE/WASTAGE row it is the average cost
+    # of the stock being consumed. That is what lets cost follow the goods
+    # from the oven to the customer instead of landing in the baking month.
+    unit_cost: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     product: Mapped[Product] = relationship(lazy="joined")
@@ -70,6 +78,18 @@ class ProductStockMovement(Base):
         Index("ix_product_stock_created", "created_at"),
         Index("ix_product_stock_reference", "reference_type", "reference_id"),
     )
+
+    @property
+    def value(self) -> Decimal:
+        """Signed value of this row: cost in on production, released on sale."""
+        if self.unit_cost is None:
+            return Decimal("0.00")
+        return (Decimal(self.unit_cost) * Decimal(self.delta)).quantize(Decimal("0.01"))
+
+    @property
+    def cost_released(self) -> Decimal:
+        """Positive cost carried out by this row (sales, wastage)."""
+        return -self.value if self.delta < 0 else Decimal("0.00")
 
     def __repr__(self) -> str:
         return (

@@ -29,6 +29,7 @@ from app.models import (
     StockMovement,
 )
 from app.services import inventory_service, recipe_service
+from app.utils.money import money
 
 # ---------------------------------------------------------------------------
 # Reading
@@ -101,6 +102,7 @@ def _add(
     reference_type: str | None = None,
     reference_id: int | None = None,
     note: str | None = None,
+    unit_cost: Decimal | None = None,
 ) -> ProductStockMovement:
     movement = ProductStockMovement(
         product_id=product_id,
@@ -109,9 +111,40 @@ def _add(
         reference_type=reference_type,
         reference_id=reference_id,
         note=note,
+        unit_cost=unit_cost,
     )
     db.add(movement)
     return movement
+
+
+def average_cost(db: Session, product_id: int) -> Decimal:
+    """Weighted-average cost of the units currently on the shelf.
+
+    Computed from the ledger itself: what came in (production, returns) at
+    its recorded cost, minus what went out at the cost it was released at.
+    No separate running balance to drift out of step with the rows.
+    """
+    rows = db.execute(
+        select(ProductStockMovement.delta, ProductStockMovement.unit_cost).where(
+            ProductStockMovement.product_id == product_id
+        )
+    ).all()
+
+    units = 0
+    value = Decimal("0.00")
+    last_cost: Decimal | None = None
+    for delta, unit_cost in rows:
+        if unit_cost is None:
+            continue
+        cost = Decimal(unit_cost)
+        units += int(delta)
+        value += cost * Decimal(delta)
+        if delta > 0:
+            last_cost = cost
+
+    if units <= 0:
+        return (last_cost or Decimal("0.00")).quantize(Decimal("0.01"))
+    return (value / Decimal(units)).quantize(Decimal("0.01"))
 
 
 def bake(db: Session, product_id: int, quantity: int, note: str | None = None) -> int:
@@ -129,12 +162,15 @@ def bake(db: Session, product_id: int, quantity: int, note: str | None = None) -
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    unit_cost = recipe_service.recipe_cost(db, product_id).quantize(Decimal("0.01"))
+
     _add(
         db,
         product_id,
         quantity,
         ProductMovementReason.PRODUCTION,
         note=note or f"Baked {quantity} × {product.display_name}",
+        unit_cost=unit_cost,
     )
 
     for line in recipe_service.list_recipe(db, product_id):
@@ -176,7 +212,14 @@ def adjust(
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    _add(db, product_id, delta, reason, note=note)
+    _add(
+        db,
+        product_id,
+        delta,
+        reason,
+        note=note,
+        unit_cost=average_cost(db, product_id) if delta < 0 else Decimal("0.00"),
+    )
     db.flush()
     return available(db, product_id)
 
@@ -207,6 +250,7 @@ def draw_for_order(db: Session, order: Order) -> dict[int, int]:
             reference_id=order.id,
             note=f"{take} × {item.product.display_name if item.product else ''} "
             f"from ready stock for {order.order_number}",
+            unit_cost=average_cost(db, item.product_id),
         )
         on_hand[item.product_id] = left - take
         drawn[item.product_id] = take
@@ -229,17 +273,25 @@ def return_for_order(db: Session, order: Order) -> dict[int, int]:
             reference_type="Order",
             reference_id=order.id,
             note=f"Returned to stock — {order.order_number} cancelled",
+            unit_cost=average_cost(db, product_id),
         )
     db.flush()
     return taken
 
 
-def stock_value(db: Session) -> dict[str, int]:
-    """Small summary for the screen header."""
+def stock_value(db: Session) -> dict:
+    """Small summary for the screen header: units on hand, and what they cost."""
     rows = availability_map(db)
+    on_shelf = {pid: qty for pid, qty in rows.items() if qty > 0}
+
+    value = Decimal("0.00")
+    for product_id, qty in on_shelf.items():
+        value += average_cost(db, product_id) * Decimal(qty)
+
     return {
-        "products_with_stock": sum(1 for q in rows.values() if q > 0),
-        "units": sum(q for q in rows.values() if q > 0),
+        "products_with_stock": len(on_shelf),
+        "units": sum(on_shelf.values()),
+        "value": money(value),
     }
 
 

@@ -33,6 +33,7 @@ from app.models import (
     OrderStatus,
     Payment,
     Product,
+    ProductStockMovement,
     StockMovement,
 )
 from app.services import b2b_service, inventory_service, ready_stock_service, recipe_service
@@ -613,7 +614,18 @@ def order_cogs(db: Session, order_id: int) -> Decimal:
         return Decimal(str(total or 0))
 
     net = _sum(MovementReason.CONSUMPTION) - _sum(MovementReason.RETURN)
-    return net.quantize(Decimal("0.01"))
+
+    # Units that came off the ready-stock shelf carry their cost with them:
+    # the ingredients were consumed when they were baked, so without this
+    # an order sold from stock would show a cost of zero.
+    from_stock = db.execute(
+        select(func.coalesce(func.sum(ProductStockMovement.unit_cost * ProductStockMovement.delta), 0)).where(
+            ProductStockMovement.reference_type == "Order",
+            ProductStockMovement.reference_id == order_id,
+        )
+    ).scalar()
+
+    return (net - Decimal(str(from_stock or 0))).quantize(Decimal("0.01"))
 
 
 # ===============================================================

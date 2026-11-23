@@ -145,6 +145,28 @@ def build_report(db: Session, year: int, month: int) -> dict:
         ).all()
         cogs_by_order = {oid: money(Decimal(str(total or 0))) for oid, total in rows}
 
+        # Cost released from ready stock belongs to the month it was SOLD,
+        # not the month it was baked. Without this, a month that bakes a lot
+        # and sells little looks worse than it is.
+        from app.models import ProductStockMovement
+
+        stock_rows = db.execute(
+            select(
+                ProductStockMovement.reference_id,
+                func.coalesce(
+                    func.sum(ProductStockMovement.unit_cost * ProductStockMovement.delta), 0
+                ),
+            )
+            .where(
+                ProductStockMovement.reference_type == "Order",
+                ProductStockMovement.reference_id.in_(active_ids),
+            )
+            .group_by(ProductStockMovement.reference_id)
+        ).all()
+        for oid, total in stock_rows:
+            released = money(-Decimal(str(total or 0)))
+            cogs_by_order[oid] = money(cogs_by_order.get(oid, Decimal("0.00")) + released)
+
     total_revenue = Decimal("0.00")
     total_gst = Decimal("0.00")
     total_received = Decimal("0.00")
