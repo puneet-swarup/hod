@@ -138,3 +138,74 @@ def test_the_edit_form_offers_the_other_sizes(client, db):
     body = client.get(f"/products/{small.id}/edit").text
     assert "is also sold in" in body
     assert "9 pc" in body
+
+
+# ---------------------------------------------------------------------------
+# The sizes screen — labelling a whole family in one save
+# ---------------------------------------------------------------------------
+
+
+def test_the_sizes_screen_prefills_from_data_the_product_already_has(client, db):
+    _product(db, "Nutella Brownie", None, 150)  # single piece, no label
+    _product(db, "Nutella Brownie", None, 540)
+
+    body = client.get("/products/sizes").text
+
+    # The single piece is suggested as "1 pc" rather than left blank.
+    assert 'value="1 pc"' in body
+    assert "Nutella Brownie" in body
+
+
+def test_a_product_with_no_siblings_is_not_on_the_sizes_screen(client, db):
+    _product(db, "Classic Cheesecake", None, 650)
+    _product(db, "Nutella Brownie", "4 pc", 150)
+    _product(db, "Nutella Brownie", "9 pc", 540)
+
+    body = client.get("/products/sizes").text
+    assert "Nutella Brownie" in body
+    assert "Classic Cheesecake" not in body
+
+
+def test_saving_the_screen_writes_every_label(client, db):
+    a = _product(db, "Biscoff Brownie", None, 150)
+    b = _product(db, "Biscoff Brownie", None, 540)
+
+    resp = client.post(
+        "/products/sizes",
+        data={f"label_{a.id}": "1 pc", f"label_{b.id}": "4 pc"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    db.expire_all()
+    assert db.get(Product, a.id).variant_label == "1 pc"
+    assert db.get(Product, b.id).variant_label == "4 pc"
+
+
+def test_a_saved_label_is_not_overwritten_by_the_suggestion(client, db):
+    _product(db, "Nutella Brownie", "Party pack", 1170)
+    _product(db, "Nutella Brownie", "4 pc", 150)
+
+    body = client.get("/products/sizes").text
+    assert 'value="Party pack"' in body
+
+
+def test_the_screen_flags_a_family_split_across_categories(client, db):
+    for label, price, category in (("1 pc", 140, "Cake"), ("9 pc", 750, "Cookie")):
+        product_service.create_product(
+            db,
+            {
+                "name": "Biscoff Cookies",
+                "variant_label": label,
+                "base_price": price,
+                "gst_rate": 5,
+                "category": category,
+                "pack_size": 1,
+                "pack_label": "",
+                "prep_time_hours": 2,
+                "is_active": True,
+            },
+        )
+
+    body = client.get("/products/sizes").text
+    assert "Filed under more than one category" in body

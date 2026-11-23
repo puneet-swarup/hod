@@ -14,6 +14,7 @@
             {% endif %}
         </div>
         <div class="flex gap-2">
+            <a href="/products/sizes" class="btn btn-outline btn-sm">Sizes</a>
             <a href="/products/import" class="btn btn-outline btn-sm">Import</a>
             <a href="/products/new" class="btn btn-amber btn-sm font-semibold">+ Add Product</a>
         </div>
@@ -22,6 +23,12 @@
     {% if request.query_params.get('imported') %}
     <div class="alert alert-success text-sm py-2">
         <span>{{ request.query_params.get('imported') }} product(s) imported.</span>
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('sizes') %}
+    <div class="alert alert-success text-sm py-2">
+        <span>{{ request.query_params.get('sizes') }} size label(s) saved.</span>
     </div>
     {% endif %}
 

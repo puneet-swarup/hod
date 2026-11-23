@@ -107,6 +107,93 @@ def search_products(request: Request, q: str = "", db: Session = Depends(get_db)
 
 
 # ---------------------------------------------------------------
+# Size labels — one screen for every family
+# ---------------------------------------------------------------
+
+
+def _suggest_label(product, has_siblings: bool) -> str:
+    """A sensible size for a product that has none yet.
+
+    Never invents a measurement: it only turns data the product already
+    carries (pack size, pack label, measure) into the wording a customer
+    would use. A single piece inside a family becomes "1 pc", which is the
+    case that otherwise reads as a bare product name.
+    """
+    if product.variant_label:
+        return product.variant_label
+    if product.pack_label:
+        return product.pack_label
+    if product.measure_value is not None and product.measure_unit:
+        return f"{product.measure_value:g} {product.measure_unit}"
+    if product.pack_size and product.pack_size > 1:
+        return f"{product.pack_size} pc"
+    if has_siblings:
+        return "1 pc"
+    return ""
+
+
+@router.get("/sizes", response_class=HTMLResponse)
+def size_labels_page(request: Request, db: Session = Depends(get_db)):
+    """Every product that has siblings, with an editable size label."""
+    templates = request.app.state.templates
+    products = product_service.list_products(db, include_inactive=False)
+
+    grouped: dict[str, list] = {}
+    for product in products:
+        grouped.setdefault(product.family_key, []).append(product)
+
+    families = []
+    for members in grouped.values():
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda p: (p.base_price or 0))
+        families.append(
+            {
+                "name": members[0].name,
+                "categories": sorted({m.category for m in members}),
+                "rows": [
+                    {
+                        "product": m,
+                        "suggestion": _suggest_label(m, has_siblings=True),
+                    }
+                    for m in members
+                ],
+            }
+        )
+    families.sort(key=lambda f: f["name"].lower())
+
+    return templates.TemplateResponse(
+        request=request,
+        name="products/sizes.html",
+        context={
+            "settings": request.app.state.settings,
+            "families": families,
+            "missing": sum(1 for f in families for r in f["rows"] if not r["product"].variant_label),
+        },
+    )
+
+
+@router.post("/sizes", response_class=HTMLResponse)
+async def save_size_labels(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    updated = 0
+    for key, value in form.items():
+        if not key.startswith("label_"):
+            continue
+        try:
+            product_id = int(key.split("_", 1)[1])
+        except ValueError:
+            continue
+        product = product_service.get_product(db, product_id)
+        label = str(value).strip() or None
+        if product.variant_label != label:
+            product.variant_label = label
+            updated += 1
+    db.commit()
+    return RedirectResponse(url=f"/products/?sizes={updated}", status_code=303)
+
+
+# ---------------------------------------------------------------
 # Bulk import
 # ---------------------------------------------------------------
 
