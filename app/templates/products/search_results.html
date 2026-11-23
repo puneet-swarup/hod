@@ -10,7 +10,7 @@
     <div class="min-w-0">
         <div class="font-medium text-sm truncate">{{ p.name }}</div>
         <div class="text-xs text-base-content/50 font-mono truncate">
-            {{ p.sku }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %}
+            {{ p.sku }}{% if p.size_label %} · {{ p.size_label }}{% endif %}
         </div>
     </div>
     <span class="text-sm font-semibold whitespace-nowrap">{{ p.base_price|money }}</span>

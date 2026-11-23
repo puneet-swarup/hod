@@ -1,9 +1,8 @@
 {#- Single source of truth for how a product is labelled in pickers.
 
-    The order-form type-ahead and its suggestions both use this macro, so the
-    text a user picks is exactly the text shown back in the field. -#}
+    "Nutella Brownie · 9 pc" — the size comes from variant_label, falling
+    back to pack label and measure, so five sizes of one brownie no longer
+    look identical in a search result. -#}
 {% macro product_label(p) -%}
-{{- p.name -}}
-{%- if p.measure_display %}{{ ' · ' ~ p.measure_display }}{% endif -%}
-{%- if p.pack_display %}{{ ' · ' ~ p.pack_display }}{% endif -%}
+{{- p.display_name -}}
 {%- endmacro %}

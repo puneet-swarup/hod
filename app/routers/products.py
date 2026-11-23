@@ -26,6 +26,11 @@ def list_products_page(request: Request, db: Session = Depends(get_db)):
     settings = request.app.state.settings
     products = product_service.list_products(db, include_inactive=True)
 
+    # Products sharing a name are sizes of one thing; the header counts both.
+    families: dict[str, list] = {}
+    for product in products:
+        families.setdefault(product.family_key, []).append(product)
+
     capacities = recipe_service.capacity_for_products(db, [p.id for p in products])
 
     # Per-product unit cost and margin. Small bakery with a handful of
@@ -52,6 +57,7 @@ def list_products_page(request: Request, db: Session = Depends(get_db)):
             "products": products,
             "capacities": capacities,
             "economics": economics,
+            "families": families,
         },
     )
 
@@ -101,6 +107,123 @@ def search_products(request: Request, q: str = "", db: Session = Depends(get_db)
 
 
 # ---------------------------------------------------------------
+# Bulk import
+# ---------------------------------------------------------------
+
+
+def _parse_import_rows(raw: str) -> tuple[list[dict], list[str]]:
+    """Parse pasted CSV into product rows. Returns (rows, errors).
+
+    Accepted columns, in order: name, size, price, gst, category.
+    A header line is skipped. Blank lines are ignored. Sizes sharing a name
+    become variants of one product automatically.
+    """
+    import csv
+    import io
+
+    rows: list[dict] = []
+    errors: list[str] = []
+
+    reader = csv.reader(io.StringIO(raw))
+    first_content_row = True
+    for number, cells in enumerate(reader, start=1):
+        cells = [c.strip() for c in cells]
+        if not any(cells):
+            continue
+        if first_content_row:
+            first_content_row = False
+            if cells[0].lower() in {"name", "product", "item"}:
+                continue  # a header line, wherever it sits
+        if len(cells) < 3:
+            errors.append(f"line {number}: expected at least name, size, price")
+            continue
+
+        name, size, price = cells[0], cells[1], cells[2]
+        gst = cells[3] if len(cells) > 3 and cells[3] else "5"
+        category = cells[4] if len(cells) > 4 and cells[4] else "Cake"
+
+        if not name:
+            errors.append(f"line {number}: name is empty")
+            continue
+        try:
+            price_value = float(price)
+            if price_value <= 0:
+                raise ValueError
+        except ValueError:
+            errors.append(f"line {number}: price '{price}' is not a positive number")
+            continue
+        try:
+            gst_value = float(gst)
+        except ValueError:
+            errors.append(f"line {number}: GST '{gst}' is not a number")
+            continue
+
+        rows.append(
+            {
+                "name": name,
+                "variant_label": size or None,
+                "base_price": price_value,
+                "gst_rate": gst_value,
+                "category": category,
+                "pack_size": 1,
+                "pack_label": "",
+                "prep_time_hours": 4,
+                "is_active": True,
+            }
+        )
+    return rows, errors
+
+
+@router.get("/import", response_class=HTMLResponse)
+def import_products_page(request: Request, db: Session = Depends(get_db)):
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        request=request,
+        name="products/import.html",
+        context={"settings": request.app.state.settings, "raw": ""},
+    )
+
+
+@router.post("/import", response_class=HTMLResponse)
+async def import_products(request: Request, db: Session = Depends(get_db)):
+    templates = request.app.state.templates
+    form = await request.form()
+    raw = str(form.get("rows") or "")
+
+    rows, errors = _parse_import_rows(raw)
+    if not rows and not errors:
+        errors.append("Nothing to import — paste some rows first.")
+
+    # All or nothing: a half-imported catalogue is worse than none.
+    created = 0
+    if not errors:
+        try:
+            for row in rows:
+                product_service.create_product(db, dict(row))
+                created += 1
+            db.commit()
+        except Exception as exc:  # noqa: BLE001 - surfaced to the user
+            db.rollback()
+            created = 0
+            errors.append(f"Nothing was imported: {exc}")
+
+    if errors:
+        return templates.TemplateResponse(
+            request=request,
+            name="products/import.html",
+            context={
+                "settings": request.app.state.settings,
+                "raw": raw,
+                "errors": errors,
+                "parsed": len(rows),
+            },
+            status_code=400,
+        )
+
+    return RedirectResponse(url=f"/products/?imported={created}", status_code=303)
+
+
+# ---------------------------------------------------------------
 # Create
 # ---------------------------------------------------------------
 
@@ -147,6 +270,7 @@ def create_product(
     measure_unit: str = Form(""),
     pack_size: int = Form(1),
     pack_label: str = Form(""),
+    variant_label: str = Form(""),
     base_price: float = Form(...),
     gst_rate: float = Form(5.0),
     prep_time_hours: int = Form(4),
@@ -164,6 +288,7 @@ def create_product(
         "measure_unit": measure_unit.strip() or None,
         "pack_size": pack_size,
         "pack_label": pack_label.strip(),
+        "variant_label": variant_label.strip() or None,
         "base_price": base_price,
         "gst_rate": gst_rate,
         "prep_time_hours": prep_time_hours,
@@ -194,10 +319,19 @@ def edit_product_form(request: Request, product_id: int, db: Session = Depends(g
     templates = request.app.state.templates
     settings = request.app.state.settings
     product = product_service.get_product(db, product_id)
+
+    # Other sizes of the same thing, so labelling a family is one tap apart.
+    siblings = [
+        other
+        for other in product_service.list_products(db, include_inactive=True)
+        if other.id != product.id and other.family_key == product.family_key
+    ]
+    siblings.sort(key=lambda p: p.base_price or 0)
+
     return templates.TemplateResponse(
         request=request,
         name="products/form.html",
-        context={"settings": settings, "product": product},
+        context={"settings": settings, "product": product, "siblings": siblings},
     )
 
 
@@ -213,6 +347,7 @@ def update_product(
     measure_unit: str = Form(""),
     pack_size: int = Form(1),
     pack_label: str = Form(""),
+    variant_label: str = Form(""),
     base_price: float = Form(...),
     gst_rate: float = Form(5.0),
     prep_time_hours: int = Form(4),
@@ -230,6 +365,7 @@ def update_product(
         "measure_unit": measure_unit.strip() or None,
         "pack_size": pack_size,
         "pack_label": pack_label.strip(),
+        "variant_label": variant_label.strip() or None,
         "base_price": base_price,
         "gst_rate": gst_rate,
         "prep_time_hours": prep_time_hours,

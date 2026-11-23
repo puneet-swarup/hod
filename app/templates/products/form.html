@@ -63,6 +63,37 @@
             <div class="card-body space-y-4">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Size / Pack</h2>
 
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text font-semibold">Size label</span>
+                        <span class="label-text-alt text-base-content/50">what the customer asks for</span>
+                    </label>
+                    <input type="text" name="variant_label" id="p-variant-label"
+                           value="{{ product.variant_label if product and product.variant_label else (form_data.variant_label if form_data else '') }}"
+                           class="input input-bordered w-full" placeholder="e.g., 4 pc, 9 pc, 500 g, 1 kg" />
+                    <label class="label"><span class="label-text-alt text-base-content/50">
+                        Products with the same name are shown as sizes of one item.
+                        This label is what tells them apart in the order form.
+                    </span></label>
+                </div>
+
+                {% if siblings %}
+                <div class="alert alert-info text-sm py-2">
+                    <div>
+                        <p class="font-semibold">{{ product.name }} is also sold in:</p>
+                        <div class="flex flex-wrap gap-1 mt-1">
+                            {% for sib in siblings %}
+                            <a href="/products/{{ sib.id }}/edit"
+                               class="badge badge-outline badge-sm hover:badge-primary">
+                                {{ sib.size_label or 'no size yet' }} · {{ sib.base_price|money }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                        <p class="text-xs mt-1 opacity-70">Tap one to label it.</p>
+                    </div>
+                </div>
+                {% endif %}
+
                 <div class="grid grid-cols-2 gap-3">
                     <div class="form-control">
                         <label class="label"><span class="label-text font-semibold">Weight / Volume / Quantity</span></label>

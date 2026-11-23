@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Import products — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">Import products</h1>
+        <a href="/products/" class="btn btn-ghost btn-sm">← Back</a>
+    </div>
+
+    {% if errors %}
+    <div class="alert alert-error text-sm">
+        <div>
+            <p class="font-semibold">Nothing was imported — {{ errors|length }} problem(s):</p>
+            <ul class="list-disc ml-5 mt-1 space-y-0.5">
+                {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-3">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Paste rows, one product per line</h2>
+
+            <div class="text-sm space-y-1">
+                <p>Five columns, comma separated: <code class="text-xs">name, size, price, gst, category</code></p>
+                <p class="text-base-content/60">
+                    Only the first three are required. Rows with the same name become
+                    <strong>sizes of one product</strong>, so the order form can tell them apart.
+                </p>
+            </div>
+
+            <pre class="bg-base-200 rounded-lg p-3 text-xs overflow-x-auto">Nutella Brownie, 4 pc, 150, 5, Brownie
+Nutella Brownie, 9 pc, 540, 5, Brownie
+Nutella Brownie, 1 kg, 1170, 5, Brownie
+Ghee Nankhatai, 250 g, 150, 5, Cookie</pre>
+
+            <form method="post" action="/products/import" class="space-y-3">
+                <textarea name="rows" rows="12" required
+                          class="textarea textarea-bordered w-full font-mono text-sm"
+                          placeholder="Name, Size, Price, GST, Category">{{ raw }}</textarea>
+
+                {% if parsed %}
+                <p class="text-xs text-base-content/60">{{ parsed }} row(s) parsed — fix the problems above and try again.</p>
+                {% endif %}
+
+                <div class="flex gap-2">
+                    <button type="submit" class="btn btn-amber font-semibold">Import</button>
+                    <a href="/products/" class="btn btn-ghost">Cancel</a>
+                </div>
+                <p class="text-xs text-base-content/50">
+                    All or nothing: if any line is wrong, nothing is created. SKUs are generated for you.
+                </p>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

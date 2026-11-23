@@ -4,10 +4,26 @@
 {% block content %}
 <div class="space-y-4">
 
-    <div class="flex justify-between items-center">
-        <h1 class="text-2xl font-extrabold text-amber-900">Products</h1>
-        <a href="/products/new" class="btn btn-amber btn-sm font-semibold">+ Add Product</a>
+    <div class="flex justify-between items-center flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">Products</h1>
+            {% if families %}
+            <p class="text-xs text-base-content/60">
+                {{ products|length }} sellable items in {{ families|length }} products
+            </p>
+            {% endif %}
+        </div>
+        <div class="flex gap-2">
+            <a href="/products/import" class="btn btn-outline btn-sm">Import</a>
+            <a href="/products/new" class="btn btn-amber btn-sm font-semibold">+ Add Product</a>
+        </div>
     </div>
+
+    {% if request.query_params.get('imported') %}
+    <div class="alert alert-success text-sm py-2">
+        <span>{{ request.query_params.get('imported') }} product(s) imported.</span>
+    </div>
+    {% endif %}
 
     {% if products %}
 
@@ -37,8 +53,12 @@
                         <td class="font-mono text-xs">{{ product.sku }}</td>
                         <td class="font-semibold">{{ product.name }}</td>
                         <td><span class="badge badge-outline badge-sm">{{ product.category }}</span></td>
-                        <td class="text-sm">
-                            {{ product.measure_display or '' }}{% if product.measure_display and product.pack_display %} · {% endif %}{{ product.pack_display or '' }}{% if not product.measure_display and not product.pack_display %}—{% endif %}
+                        <td class="text-sm whitespace-nowrap">
+                            {% if product.size_label %}
+                                <span class="badge badge-ghost badge-sm">{{ product.size_label }}</span>
+                            {% else %}
+                                <span class="text-base-content/30">—</span>
+                            {% endif %}
                         </td>
                         <td class="text-right font-medium">{{ product.base_price|money }}</td>
                         <td class="text-right text-sm">
@@ -114,6 +134,9 @@
                 <div class="flex justify-between items-start">
                     <div class="min-w-0">
                         <h3 class="font-bold text-lg truncate">{{ product.name }}</h3>
+                        {% if product.size_label %}
+                        <p class="text-sm font-semibold text-amber-900">{{ product.size_label }}</p>
+                        {% endif %}
                         <p class="text-xs text-base-content/60 font-mono truncate">{{ product.sku }}</p>
                     </div>
                     {% if product.is_active %}

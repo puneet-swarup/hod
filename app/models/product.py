@@ -31,6 +31,12 @@ class Product(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(String(50), nullable=False, default="Cake")
 
+    # One product per SELLABLE unit, but products that share a name are one
+    # family: "Nutella Brownie" in 4 pc / 9 pc / 12 pc / 1 kg. variant_label
+    # is the size that distinguishes them ("9 pc"), so the picker can show
+    # "Nutella Brownie · 9 pc — ₹540" instead of five identical rows.
+    variant_label: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
     # Weight or volume — optional. measure_value is meaningless without measure_unit.
     measure_value: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
     measure_unit: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -62,6 +68,31 @@ class Product(Base):
         Index("ix_products_is_active", "is_active"),
         Index("ix_products_category", "category"),
     )
+
+    @property
+    def family_key(self) -> str:
+        """Products sharing this are sizes of the same thing."""
+        return " ".join((self.name or "").lower().split())
+
+    @property
+    def size_label(self) -> str:
+        """What distinguishes this product from its siblings, best first."""
+        if self.variant_label:
+            return self.variant_label
+        if self.pack_label:
+            return self.pack_label
+        measure = self.measure_display
+        if measure:
+            return measure
+        if self.pack_size and self.pack_size > 1:
+            return f"Pack of {self.pack_size}"
+        return ""
+
+    @property
+    def display_name(self) -> str:
+        """'Nutella Brownie · 9 pc' — used everywhere a product is listed."""
+        size = self.size_label
+        return f"{self.name} · {size}" if size else self.name
 
     @property
     def measure_display(self) -> str:
