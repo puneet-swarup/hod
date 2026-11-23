@@ -183,13 +183,19 @@ def create_order(
     advance_method: str = Form("UPI"),
     product_id: list[int] = Form(...),
     quantity: list[int] = Form(...),
+    unit_price: list[str] = Form(default=[]),
     order_date: str = Form(None),
 ):
     templates = request.app.state.templates
     settings = request.app.state.settings
 
+    # The form sends a rate per row, prefilled from the product's configured
+    # price. A different number means it was sold above or below list, which
+    # the service records rather than silently replacing.
+    prices = list(unit_price) + [""] * (len(product_id) - len(unit_price))
     items = [
-        {"product_id": pid, "quantity": qty} for pid, qty in zip(product_id, quantity, strict=True)
+        {"product_id": pid, "quantity": qty, "unit_price": price}
+        for pid, qty, price in zip(product_id, quantity, prices, strict=True)
     ]
 
     account_pk = int(account_id) if (account_id or "").strip().isdigit() else None
@@ -284,12 +290,18 @@ def update_order(
     notes: str = Form(None),
     product_id: list[int] = Form(...),
     quantity: list[int] = Form(...),
+    unit_price: list[str] = Form(default=[]),
 ):
     templates = request.app.state.templates
     settings = request.app.state.settings
 
+    # The form sends a rate per row, prefilled from the product's configured
+    # price. A different number means it was sold above or below list, which
+    # the service records rather than silently replacing.
+    prices = list(unit_price) + [""] * (len(product_id) - len(unit_price))
     items = [
-        {"product_id": pid, "quantity": qty} for pid, qty in zip(product_id, quantity, strict=True)
+        {"product_id": pid, "quantity": qty, "unit_price": price}
+        for pid, qty, price in zip(product_id, quantity, prices, strict=True)
     ]
 
     data = {

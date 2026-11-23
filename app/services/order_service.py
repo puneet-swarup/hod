@@ -16,7 +16,7 @@ Key guarantees:
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -255,10 +255,12 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
             raise HTTPException(status_code=400, detail="Quantity must be positive")
 
         if priced_lines is not None:
-            unit_price = priced_lines[idx]["unit_price"]
+            list_price = money(priced_lines[idx]["unit_price"])
+            unit_price = _charged_price(item_data, list_price)
             gst_rate = priced_lines[idx]["gst_rate"]
         else:
-            unit_price = money(product.base_price)
+            list_price = money(product.base_price)
+            unit_price = _charged_price(item_data, list_price)
             gst_rate = money(product.gst_rate)
         gst_amount = gst_for_line(unit_price, qty, gst_rate)
         line_total = line_total_with_gst(unit_price, qty, gst_amount)
@@ -269,6 +271,7 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
                 "product_id": product.id,
                 "quantity": qty,
                 "unit_price": unit_price,
+                "list_price": list_price,
                 "gst_rate": gst_rate,
                 "gst_amount": gst_amount,
                 "line_total": line_total,
@@ -397,6 +400,12 @@ def update_status(
 
     order.status = target
 
+    # A cancelled order cannot be owed money. Keep advance_paid — it is the
+    # record of cash taken — but clear the balance, or the order sits in the
+    # UI claiming a customer owes ₹1,250 on something that was cancelled.
+    if target == OrderStatus.CANCELLED:
+        order.balance_due = Decimal("0.00")
+
     log_action(
         db,
         entity_type="Order",
@@ -406,6 +415,7 @@ def update_status(
         new_value={
             "status": target.value,
             "salvage": salvage if target == OrderStatus.CANCELLED else None,
+            "balance_cleared": str(order.balance_due) if target == OrderStatus.CANCELLED else None,
         },
     )
     db.commit()
@@ -636,6 +646,7 @@ def _build_order(db: Session, data: dict, items_data: list[dict], account=None) 
                     product_id=line["product_id"],
                     quantity=line["quantity"],
                     unit_price=line["unit_price"],
+                    list_price=line["unit_price"],
                     gst_rate=line["gst_rate"],
                     gst_amount=line["gst_amount"],
                     line_total=line["line_total"],
@@ -655,7 +666,11 @@ def _build_order(db: Session, data: dict, items_data: list[dict], account=None) 
             if qty <= 0:
                 raise HTTPException(status_code=400, detail="Quantity must be positive")
 
-            unit_price = money(product.base_price)
+            # list_price is what the product is configured at. unit_price is
+            # what was charged, which may differ (festival price, discount,
+            # negotiated one-off). Both are kept so the difference is visible.
+            list_price = money(product.base_price)
+            unit_price = _charged_price(item_data, list_price)
             gst_rate = money(product.gst_rate)
             gst_amount = gst_for_line(unit_price, qty, gst_rate)
             line_total = line_total_with_gst(unit_price, qty, gst_amount)
@@ -668,6 +683,7 @@ def _build_order(db: Session, data: dict, items_data: list[dict], account=None) 
                     product_id=product.id,
                     quantity=qty,
                     unit_price=unit_price,
+                    list_price=list_price,
                     gst_rate=gst_rate,
                     gst_amount=gst_amount,
                     line_total=line_total,
@@ -720,6 +736,25 @@ def _build_order(db: Session, data: dict, items_data: list[dict], account=None) 
         },
     )
     return order
+
+
+def _charged_price(item_data: dict, list_price: Decimal) -> Decimal:
+    """The price actually charged, honouring an explicit override.
+
+    The form may send `unit_price`; when it does not, or sends the same
+    number, this is just the list price. An override is never silently
+    ignored — a non-positive price is rejected rather than stored.
+    """
+    raw = item_data.get("unit_price")
+    if raw in (None, ""):
+        return list_price
+    try:
+        charged = money(Decimal(str(raw)))
+    except (InvalidOperation, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid price on an item") from None
+    if charged <= 0:
+        raise HTTPException(status_code=400, detail="Price must be greater than zero")
+    return charged
 
 
 def _parse_date(value):

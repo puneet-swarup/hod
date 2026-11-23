@@ -127,7 +127,14 @@
                                 {% endif %}
                             </td>
                             <td class="text-right">{{ item.quantity }}</td>
-                            <td class="text-right">{{ item.unit_price|money }}</td>
+                            <td class="text-right whitespace-nowrap">
+                                {{ item.unit_price|money }}
+                                {% if item.price_delta %}
+                                <div class="text-xs {{ 'text-warning' if item.price_delta > 0 else 'text-info' }}">
+                                    {{ item.price_note }} · list {{ item.list_price|money }}
+                                </div>
+                                {% endif %}
+                            </td>
                             <td class="text-right">{{ item.gst_amount|money }}</td>
                             <td class="text-right font-medium">{{ item.line_total|money }}</td>
                         </tr>

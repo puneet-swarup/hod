@@ -25,12 +25,13 @@ import io
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
-from app.models import Order, OrderStatus
+from app.models import Order, OrderStatus, Payment
 from app.utils.money import money
 from app.utils.time import business_now
 
@@ -49,6 +50,25 @@ MONTH_NAMES = [
     "November",
     "December",
 ]
+
+
+def _month_bounds_utc(year: int, month: int) -> tuple[datetime, datetime]:
+    """Naive UTC bounds for timestamps that are stored as instants.
+
+    Payments are UTC; order_date is local (ADR-0017). Mixing the two bounds
+    is how a cash figure ends up 5h30m out of step with the revenue figure.
+    """
+    tz = ZoneInfo(get_settings().business_timezone)
+    start = datetime(year, month, 1, tzinfo=tz)
+    nxt = (
+        datetime(year + 1, 1, 1, tzinfo=tz)
+        if month == 12
+        else datetime(year, month + 1, 1, tzinfo=tz)
+    )
+    return (
+        start.astimezone(UTC).replace(tzinfo=None),
+        (nxt - timedelta(microseconds=1)).astimezone(UTC).replace(tzinfo=None),
+    )
 
 
 def _month_bounds_local(year: int, month: int) -> tuple[datetime, datetime]:
@@ -90,8 +110,6 @@ def build_report(db: Session, year: int, month: int) -> dict:
     Includes cancelled orders in a separate count but excludes them
     from revenue and COGS.
     """
-    from sqlalchemy import func
-
     from app.models import MovementReason, StockMovement
 
     start_local, end_local = _month_bounds_local(year, month)
@@ -252,6 +270,86 @@ def build_report(db: Session, year: int, month: int) -> dict:
             }
         )
 
+    # --- Cash, and the bridge that makes the month reconcile --------------
+    # Revenue is accrual: what was earned, whenever it is paid. Cash is what
+    # actually arrived, whenever the order was placed. They are different
+    # numbers on purpose, and the bridge is what turns "these never match"
+    # into "these always match, here is the gap".
+    start_utc, end_utc = _month_bounds_utc(year, month)
+
+    cash_rows = db.execute(
+        select(Order.status, func.coalesce(func.sum(Payment.amount), 0))
+        .join(Payment, Payment.order_id == Order.id)
+        .where(Payment.received_at >= start_utc, Payment.received_at <= end_utc)
+        .group_by(Order.status)
+    ).all()
+    cash_received = sum(
+        (money(Decimal(str(v or 0))) for st, v in cash_rows if st != OrderStatus.CANCELLED),
+        Decimal("0.00"),
+    )
+    cash_held_cancelled = sum(
+        (money(Decimal(str(v or 0))) for st, v in cash_rows if st == OrderStatus.CANCELLED),
+        Decimal("0.00"),
+    )
+
+    # Everything ever taken on an order that is now cancelled — the money
+    # that needs a refund or a decision, not just this month's slice.
+    held_total = money(
+        db.execute(
+            select(func.coalesce(func.sum(Payment.amount), 0))
+            .join(Order, Order.id == Payment.order_id)
+            .where(Order.status == OrderStatus.CANCELLED)
+        ).scalar()
+        or 0
+    )
+
+    # Opening outstanding = billed before this month, minus paid before it.
+    billed_before = money(
+        db.execute(
+            select(func.coalesce(func.sum(Order.total_amount), 0)).where(
+                Order.order_date < start_local,
+                Order.status != OrderStatus.CANCELLED,
+            )
+        ).scalar()
+        or 0
+    )
+    cash_before = money(
+        db.execute(
+            select(func.coalesce(func.sum(Payment.amount), 0))
+            .join(Order, Order.id == Payment.order_id)
+            .where(Payment.received_at < start_utc, Order.status != OrderStatus.CANCELLED)
+        ).scalar()
+        or 0
+    )
+    opening_outstanding = money(billed_before - cash_before)
+    closing_outstanding = money(opening_outstanding + total_revenue - cash_received)
+
+    # Lines sold above or below the configured price (festival pricing,
+    # a discount, a negotiated one-off). The delta is what the report needs
+    # to explain a month whose revenue does not match the price list.
+    price_adjustments: list[dict] = []
+    for o in active_orders:
+        for it in o.items:
+            delta = it.price_delta
+            if not delta:
+                continue
+            price_adjustments.append(
+                {
+                    "order_number": o.order_number,
+                    "order_date": o.order_date,
+                    "sku": it.product.sku if it.product else "",
+                    "product": it.product.name if it.product else "(deleted)",
+                    "quantity": it.quantity,
+                    "list_price": money(it.list_price),
+                    "charged": money(it.unit_price),
+                    "delta_each": delta,
+                    "delta_total": money(delta * it.quantity),
+                }
+            )
+    price_adjustment_total = money(
+        sum((r["delta_total"] for r in price_adjustments), Decimal("0.00"))
+    )
+
     # Per-partner rollup for the month — the number you actually chase.
     partners: dict[int, dict] = {}
     for o in active_orders:
@@ -303,6 +401,13 @@ def build_report(db: Session, year: int, month: int) -> dict:
         ),
         "by_status": by_status,
         "by_payment": by_payment,
+        "price_adjustments": price_adjustments,
+        "price_adjustment_total": price_adjustment_total,
+        "cash_received": cash_received,
+        "cash_held_cancelled": cash_held_cancelled,
+        "held_on_cancelled_total": held_total,
+        "opening_outstanding": opening_outstanding,
+        "closing_outstanding": closing_outstanding,
         "by_channel": channel_rows,
         "by_partner": by_partner,
         "b2b_revenue": money(
@@ -338,9 +443,19 @@ def render_csv(report: dict) -> str:
     w.writerow(["Cost of goods (COGS)", f"{report['total_cogs']:.2f}"])
     w.writerow(["Gross margin", f"{report['gross_margin']:.2f}"])
     w.writerow(["Gross margin %", f"{report['gross_margin_pct']:.2f}"])
-    w.writerow(["Amount received", f"{report['total_received']:.2f}"])
-    w.writerow(["Outstanding", f"{report['total_outstanding']:.2f}"])
+    w.writerow(["Paid against this month's orders", f"{report['total_received']:.2f}"])
+    w.writerow(["Unpaid on this month's orders", f"{report['total_outstanding']:.2f}"])
+    w.writerow(["Cash received in the month (payment dates)", f"{report['cash_received']:.2f}"])
+    w.writerow(["Cash held on cancelled orders (this month)", f"{report['cash_held_cancelled']:.2f}"])
+    w.writerow(["Cash held on cancelled orders (all time)", f"{report['held_on_cancelled_total']:.2f}"])
+    w.writerow(["Sold above/below list (net)", f"{report['price_adjustment_total']:.2f}"])
     w.writerow(["Average order value", f"{report['average_order_value']:.2f}"])
+    w.writerow([])
+    w.writerow(["Reconciliation"])
+    w.writerow(["Opening outstanding", f"{report['opening_outstanding']:.2f}"])
+    w.writerow(["+ Revenue this month", f"{report['total_revenue']:.2f}"])
+    w.writerow(["- Cash received this month", f"{report['cash_received']:.2f}"])
+    w.writerow(["= Closing outstanding", f"{report['closing_outstanding']:.2f}"])
     w.writerow([])
 
     w.writerow(["Orders by status"])
@@ -411,6 +526,24 @@ def render_csv(report: dict) -> str:
             ]
         )
     w.writerow([])
+
+    if report["price_adjustments"]:
+        w.writerow(["Sold away from the list price"])
+        w.writerow(["Order", "SKU", "Product", "Qty", "List", "Charged", "Delta each", "Delta total"])
+        for row in report["price_adjustments"]:
+            w.writerow(
+                [
+                    row["order_number"],
+                    row["sku"],
+                    row["product"],
+                    row["quantity"],
+                    f"{row['list_price']:.2f}",
+                    f"{row['charged']:.2f}",
+                    f"{row['delta_each']:.2f}",
+                    f"{row['delta_total']:.2f}",
+                ]
+            )
+        w.writerow([])
 
     w.writerow(["Itemized orders"])
     w.writerow(
@@ -542,13 +675,39 @@ def render_pdf(report: dict, output_path: Path) -> None:
         ("Cost of goods (COGS)", money_str(report["total_cogs"])),
         ("Gross margin", money_str(report["gross_margin"])),
         ("Gross margin %", f"{report['gross_margin_pct']:.2f}%"),
-        ("Amount received", money_str(report["total_received"])),
-        ("Outstanding", money_str(report["total_outstanding"])),
+        ("Paid against this month's orders", money_str(report["total_received"])),
+        ("Unpaid on this month's orders", money_str(report["total_outstanding"])),
         ("Average order value", money_str(report["average_order_value"])),
+        ("Cash received in the month", money_str(report["cash_received"])),
+        ("Cash held on cancelled orders", money_str(report["cash_held_cancelled"])),
     ]
     for label, value in summary_rows:
         pdf.cell(100, 6, label, border=0)
         pdf.cell(0, 6, value, border=0, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(4)
+
+    # Reconciliation — the four numbers that always add up
+    pdf.set_font(font, "B", 11)
+    pdf.cell(0, 7, "Cash reconciliation", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font(font, "", 10)
+    for label, value in (
+        ("Opening outstanding", money_str(report["opening_outstanding"])),
+        ("+ Revenue this month (accrual)", money_str(report["total_revenue"])),
+        ("- Cash received this month", money_str(report["cash_received"])),
+        ("= Closing outstanding", money_str(report["closing_outstanding"])),
+    ):
+        pdf.cell(100, 6, label, border=0)
+        pdf.cell(0, 6, value, border=0, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    if report["held_on_cancelled_total"]:
+        pdf.set_font(font, "I", 8)
+        pdf.cell(
+            0,
+            6,
+            f"Plus {money_str(report['held_on_cancelled_total'])} held on cancelled orders "
+            f"(refund or adjust)",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
     pdf.ln(4)
 
     # Channel split — retail vs wholesale vs self-service

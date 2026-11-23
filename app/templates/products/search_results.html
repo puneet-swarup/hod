@@ -5,6 +5,7 @@
             border-b border-base-200 last:border-0 product-result"
      data-id="{{ p.id }}"
      data-label="{{ product_label(p) }}"
+     data-price="{{ p.base_price }}"
      data-price-label="{{ p.base_price|money }}">
     <div class="min-w-0">
         <div class="font-medium text-sm truncate">{{ p.name }}</div>

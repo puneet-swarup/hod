@@ -4,9 +4,9 @@
 
 {% from "products/_label.html" import product_label %}
 
-{% macro item_row(pid=None, qty=1, label='') %}
+{% macro item_row(pid=None, qty=1, label='', rate=None) %}
 <div class="item-row grid grid-cols-12 gap-2 items-end">
-    <div class="col-span-7 form-control">
+    <div class="col-span-5 form-control">
         <label class="label"><span class="label-text font-semibold">Product</span></label>
         <div class="relative">
             <input type="hidden" name="product_id" class="product-id"
@@ -25,14 +25,22 @@
         </div>
         <p class="product-hint text-xs text-base-content/60"></p>
     </div>
-    <div class="col-span-3 form-control">
+    <div class="col-span-2 form-control">
         <label class="label"><span class="label-text font-semibold">Qty</span></label>
         <input type="number" min="1" value="{{ qty }}" name="quantity"
                class="input input-bordered input-sm w-full" required />
     </div>
+    <div class="col-span-3 form-control">
+        <label class="label"><span class="label-text font-semibold">Rate</span></label>
+        <input type="number" step="0.01" min="0.01" name="unit_price"
+               class="input input-bordered input-sm w-full rate-input"
+               value="{{ rate if rate is defined and rate is not none else '' }}"
+               placeholder="list" title="Leave as the list price, or type what you actually charged" />
+    </div>
     <div class="col-span-2">
-        <button type="button" class="btn btn-ghost btn-sm w-full"
-                onclick="this.closest('.item-row').remove()">Remove</button>
+        <button type="button" class="btn btn-ghost btn-sm w-full px-0"
+                title="Remove this item" aria-label="Remove this item"
+                onclick="this.closest('.item-row').remove()">✕</button>
     </div>
 </div>
 {% endmacro %}
@@ -243,18 +251,19 @@
                     {% if is_edit %}
                         {% for item in order.items %}
                             {% set p = (products | selectattr('id', 'equalto', item.product_id) | list | first) %}
-                            {{ item_row(item.product_id, item.quantity, product_label(p) if p else '') }}
+                            {{ item_row(item.product_id, item.quantity, product_label(p) if p else '', item.unit_price) }}
                         {% endfor %}
                     {% elif preset_items %}
                         {% for item in preset_items %}
                             {% set p = (products | selectattr('id', 'equalto', item.product_id) | list | first) %}
+                            {# a repeat order starts at today's list price, not the old one #}
                             {{ item_row(item.product_id, item.quantity, product_label(p) if p else '') }}
                         {% endfor %}
                     {% elif form_data and form_data.items %}
                         {# Rejected submit: rebuild the rows the user had entered. #}
                         {% for item in form_data.items %}
                             {% set p = (products | selectattr('id', 'equalto', item.product_id) | list | first) %}
-                            {{ item_row(item.product_id, item.quantity, product_label(p) if p else '') }}
+                            {{ item_row(item.product_id, item.quantity, product_label(p) if p else '', item.get('unit_price')) }}
                         {% endfor %}
                     {% else %}
                         {{ item_row() }}
@@ -380,6 +389,8 @@ function addItemRow() {
     }
     const hint = clone.querySelector('.product-hint');
     if (hint) hint.textContent = '';
+    const rate = clone.querySelector('.rate-input');
+    if (rate) rate.value = '';
     const box = clone.querySelector('.product-results');
     if (box) {
         box.innerHTML = '';
@@ -589,6 +600,8 @@ function addItemRow() {
             input.classList.remove('input-error');
         }
         if (hint) hint.textContent = '';
+        const rate = itemRow.querySelector('.rate-input');
+        if (rate) rate.value = '';
     }
 
     // A suggestion was tapped: stamp its id on the row and show its label.
@@ -609,6 +622,10 @@ function addItemRow() {
             input.classList.remove('input-error');
         }
         if (hint) hint.textContent = picked.dataset.priceLabel || '';
+        // Prefill the rate with the configured price. Changing it is how a
+        // festival price or a discount is recorded — the order keeps both.
+        const rate = itemRow.querySelector('.rate-input');
+        if (rate && picked.dataset.price) rate.value = picked.dataset.price;
         closeBox(boxFor(input));
     });
 

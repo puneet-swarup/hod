@@ -12,6 +12,7 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.utils.money import money
 from app.utils.time import utcnow
 
 if TYPE_CHECKING:
@@ -192,7 +193,13 @@ class OrderItem(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
 
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # unit_price is what was CHARGED. list_price is what the product was
+    # configured at (retail price, or the partner's contract rate) at the
+    # moment of sale. They differ when something was sold above or below
+    # list — a festival price, a discount, a negotiated one-off. Nullable
+    # for rows written before this column existed.
     unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    list_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     gst_rate: Mapped[Decimal] = mapped_column(
         Numeric(5, 2), nullable=False, default=Decimal("5.00")
     )
@@ -212,6 +219,21 @@ class OrderItem(Base):
         Index("ix_order_items_order_id", "order_id"),
         Index("ix_order_items_product_id", "product_id"),
     )
+
+    @property
+    def price_delta(self) -> Decimal | None:
+        """Charged minus configured. None when the list price is unknown."""
+        if self.list_price is None:
+            return None
+        return money(self.unit_price) - money(self.list_price)
+
+    @property
+    def price_note(self) -> str:
+        """'above list' / 'below list' / '' — for badges and reports."""
+        delta = self.price_delta
+        if not delta:
+            return ""
+        return "above list" if delta > 0 else "below list"
 
     def __repr__(self) -> str:
         return f"<OrderItem id={self.id} product_id={self.product_id} qty={self.quantity}>"
