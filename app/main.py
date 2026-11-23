@@ -177,6 +177,7 @@ from app.routers import (  # noqa: E402
     orders,
     products,
     reports,
+    stock,
     today,
 )
 from app.routers import settings as settings_router  # noqa: E402
@@ -186,6 +187,7 @@ app.include_router(today.router, tags=["today"])
 app.include_router(orders.router, prefix="/orders", tags=["orders"])
 app.include_router(customers.router, prefix="/customers", tags=["customers"])
 app.include_router(b2b.router, prefix="/b2b", tags=["b2b"])
+app.include_router(stock.router, prefix="/stock", tags=["stock"])
 app.include_router(products.router, prefix="/products", tags=["products"])
 app.include_router(ingredients.router, prefix="/ingredients", tags=["ingredients"])
 app.include_router(invoices.router, prefix="/invoices", tags=["invoices"])

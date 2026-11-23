@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Ready stock — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-3xl mx-auto">
+
+    <div class="flex justify-between items-start flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">Ready stock</h1>
+            <p class="text-sm text-base-content/60">
+                What is on the shelf right now — for walk-ins and urgent asks.
+            </p>
+        </div>
+        <div class="text-right">
+            <p class="text-2xl font-extrabold text-amber-900">{{ summary.units }}</p>
+            <p class="text-xs text-base-content/60">
+                units across {{ summary.products_with_stock }} product{{ '' if summary.products_with_stock == 1 else 's' }}
+            </p>
+        </div>
+    </div>
+
+    {% if request.query_params.get('baked') %}
+    <div class="alert alert-success text-sm py-2"><span>Baked into stock. Ingredients deducted if a recipe exists.</span></div>
+    {% endif %}
+    {% if request.query_params.get('adjusted') %}
+    <div class="alert alert-success text-sm py-2"><span>Stock adjusted.</span></div>
+    {% endif %}
+
+    <!-- What is on the shelf -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-3">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">On the shelf</h2>
+
+            {% if rows %}
+            <div class="space-y-2">
+                {% for row in rows %}
+                {% set p = row.product %}
+                <div class="flex items-center gap-2 py-1 border-b border-base-200 last:border-0">
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold truncate">{{ p.name }}</p>
+                        <p class="text-xs text-base-content/60">
+                            {% if p.size_label %}{{ p.size_label }} · {% endif %}{{ p.base_price|money }}
+                            {% if row.last_bake %}· baked {{ row.last_bake|dt('%d %b, %H:%M') }}{% endif %}
+                        </p>
+                    </div>
+
+                    <span class="badge {{ 'badge-success' if row.on_hand > 0 else 'badge-ghost' }} badge-lg font-bold shrink-0">
+                        {{ row.on_hand }}
+                    </span>
+
+                    <form method="post" action="/stock/adjust" class="flex gap-1 shrink-0">
+                        <input type="hidden" name="product_id" value="{{ p.id }}" />
+                        <input type="hidden" name="reason" value="WASTAGE" />
+                        <input type="hidden" name="delta" value="-1" />
+                        <button class="btn btn-ghost btn-xs" title="One wasted / unsold"
+                                {% if row.on_hand <= 0 %}disabled{% endif %}>−1</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-base-content/60">
+                Nothing on the shelf yet. Bake something below and it appears here.
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Bake into stock -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-3">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Bake into stock</h2>
+            <p class="text-xs text-base-content/60">
+                Production that is not tied to an order. If the product has a recipe,
+                the ingredients come off the shelf too.
+            </p>
+            <form method="post" action="/stock/bake" class="space-y-2">
+                <select name="product_id" class="select select-bordered w-full" required>
+                    <option value="">Choose a product…</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.display_name }} — {{ p.base_price|money }}</option>
+                    {% endfor %}
+                </select>
+                <div class="flex gap-2">
+                    <input type="number" name="quantity" min="1" value="1"
+                           class="input input-bordered w-24" required />
+                    <input type="text" name="note" class="input input-bordered flex-1"
+                           placeholder="optional note, e.g. morning batch" />
+                    <button class="btn btn-amber font-semibold shrink-0">Bake</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Where did they go -->
+    {% if recent %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-2">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Recent movements</h2>
+            <div class="space-y-1">
+                {% for m in recent %}
+                <div class="flex items-center justify-between gap-2 text-sm">
+                    <span class="truncate">
+                        {{ m.product.name if m.product else '—' }}
+                        <span class="text-xs text-base-content/50">{{ m.reason.value|lower }}</span>
+                    </span>
+                    <span class="font-mono {{ 'text-success' if m.delta > 0 else 'text-error' }} shrink-0">
+                        {{ '+' if m.delta > 0 else '' }}{{ m.delta }}
+                    </span>
+                    <span class="text-xs text-base-content/40 shrink-0">{{ m.created_at|dt('%d %b %H:%M') }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

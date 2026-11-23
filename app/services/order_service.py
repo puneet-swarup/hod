@@ -35,7 +35,7 @@ from app.models import (
     Product,
     StockMovement,
 )
-from app.services import b2b_service, inventory_service, recipe_service
+from app.services import b2b_service, inventory_service, ready_stock_service, recipe_service
 from app.services.audit_service import log_action
 from app.services.numbering import next_b2b_order_number, next_order_number
 from app.utils.money import gst_for_line, line_total_with_gst, money
@@ -394,9 +394,14 @@ def update_status(
     old_status = order.status.value
 
     if target == OrderStatus.IN_PROGRESS and order.status == OrderStatus.CONFIRMED:
-        _deduct_for_production(db, order)
+        # Take from the shelf first; only the shortfall is baked to order.
+        drawn = ready_stock_service.draw_for_order(db, order)
+        _deduct_for_production(db, order, drawn)
     elif target == OrderStatus.CANCELLED and order.status == OrderStatus.IN_PROGRESS and salvage:
-        _return_production(db, order)
+        # Put back both halves: the units from stock, and the ingredients
+        # that were consumed for the made-to-order part.
+        drawn = ready_stock_service.return_for_order(db, order)
+        _return_production(db, order, drawn)
 
     order.status = target
 
@@ -484,13 +489,25 @@ def record_payment(
 # ===============================================================
 
 
-def _compute_needed_ingredients(db: Session, order: Order) -> dict[int, Decimal]:
-    """Sum total consumption per ingredient across all items."""
+def _compute_needed_ingredients(
+    db: Session, order: Order, drawn: dict[int, int] | None = None
+) -> dict[int, Decimal]:
+    """Sum total consumption per ingredient across all items.
+
+    `drawn` maps product_id -> units taken from ready stock. Those units
+    were consumed when they were baked, so they must not be consumed again
+    here — that is the double-count that makes a make-to-stock bakery's
+    ingredient ledger wrong.
+    """
+    drawn = drawn or {}
     needed: dict[int, Decimal] = {}
     for item in order.items:
+        make_qty = item.quantity - drawn.get(item.product_id, 0)
+        if make_qty <= 0:
+            continue
         recipe = recipe_service.list_recipe(db, item.product_id)
         for line in recipe:
-            qty = line.quantity_per_unit * Decimal(item.quantity)
+            qty = line.quantity_per_unit * Decimal(make_qty)
             needed[line.ingredient_id] = needed.get(line.ingredient_id, Decimal("0")) + qty
     return needed
 
@@ -522,12 +539,15 @@ def check_production_shortages(db: Session, order_id: int) -> list[dict]:
     return shortages
 
 
-def _deduct_for_production(db: Session, order: Order) -> None:
+def _deduct_for_production(
+    db: Session, order: Order, drawn: dict[int, int] | None = None
+) -> None:
     """
-    Create CONSUMPTION movements for all ingredients used by this order.
-    Movements are added to the session but NOT committed.
+    Create CONSUMPTION movements for the ingredients this order still needs.
+    Units taken from ready stock are excluded — they were consumed at bake
+    time. Movements are added to the session but NOT committed.
     """
-    needed = _compute_needed_ingredients(db, order)
+    needed = _compute_needed_ingredients(db, order, drawn)
     for ing_id, qty in needed.items():
         if qty <= 0:
             continue
@@ -543,7 +563,9 @@ def _deduct_for_production(db: Session, order: Order) -> None:
         )
 
 
-def _return_production(db: Session, order: Order) -> None:
+def _return_production(
+    db: Session, order: Order, drawn: dict[int, int] | None = None
+) -> None:
     """
     Reverse every CONSUMPTION movement tied to this order with a matching
     RETURN. Uses the same unit_cost_at_time, so order_cogs nets to zero.

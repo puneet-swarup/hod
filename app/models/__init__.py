@@ -20,6 +20,7 @@ from app.models.order import ALLOWED_TRANSITIONS, Order, OrderItem, OrderStatus
 from app.models.payment import Payment
 from app.models.product import Product
 from app.models.product_ingredient import ProductIngredient
+from app.models.product_stock import ProductMovementReason, ProductStockMovement
 from app.models.stock_movement import MovementReason, StockMovement
 
 __all__ = [
@@ -45,6 +46,8 @@ __all__ = [
     "Payment",
     "Product",
     "ProductIngredient",
+    "ProductMovementReason",
+    "ProductStockMovement",
     "StockMovement",
     "MovementReason",
 ]

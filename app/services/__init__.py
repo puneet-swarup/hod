@@ -7,6 +7,7 @@ from app.services import (
     invoice_service,
     order_service,
     product_service,
+    ready_stock_service,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "invoice_service",
     "order_service",
     "product_service",
+    "ready_stock_service",
 ]

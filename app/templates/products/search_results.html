@@ -13,7 +13,12 @@
             {{ p.sku }}{% if p.size_label %} · {{ p.size_label }}{% endif %}
         </div>
     </div>
-    <span class="text-sm font-semibold whitespace-nowrap">{{ p.base_price|money }}</span>
+    <div class="text-right shrink-0">
+        <div class="text-sm font-semibold whitespace-nowrap">{{ p.base_price|money }}</div>
+        {% if on_hand and on_hand.get(p.id, 0) > 0 %}
+        <div class="text-xs text-success whitespace-nowrap">{{ on_hand[p.id] }} ready</div>
+        {% endif %}
+    </div>
 </div>
 {% endfor %}
 {% else %}

@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Product
-from app.services import inventory_service, product_service, recipe_service
+from app.services import (
+    inventory_service,
+    product_service,
+    ready_stock_service,
+    recipe_service,
+)
 from app.utils.sku import validate_sku_format
 
 router = APIRouter()
@@ -99,10 +104,12 @@ def search_products(request: Request, q: str = "", db: Session = Depends(get_db)
         .all()
     )
 
+    on_hand = ready_stock_service.availability_map(db, [p.id for p in results])
+
     return templates.TemplateResponse(
         request=request,
         name="products/search_results.html",
-        context={"results": results, "q": q_clean},
+        context={"results": results, "q": q_clean, "on_hand": on_hand},
     )
 
 
