@@ -2,7 +2,7 @@
 
 [![test](https://github.com/puneet-swarup/hod/actions/workflows/test.yml/badge.svg)](https://github.com/puneet-swarup/hod/actions/workflows/test.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
-[![License: All Rights Reserved](https://img.shields.io/badge/license-All%20Rights%20Reserved-red)](LICENSE)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-orange)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-200%2B-brightgreen)](tests/)
 
 A self-hosted operations system for a small bakery.
@@ -248,8 +248,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the invariants that must no
 
 ## License
 
-All rights reserved. This source is published for portfolio and evaluation
-purposes only. See [LICENSE](LICENSE) for terms.
+Licensed under [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/). Commercial use requires a licence — write to puneetswarup@gmail.com.
 
 ## Scope
 
