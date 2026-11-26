@@ -18,12 +18,18 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.domain import (
+    ConflictError,
+    NotFoundError,
+    StateError,
+    UnreachableError,
+    ValidationError,
+)
 from app.models import (
     Customer,
     Ingredient,
@@ -62,7 +68,7 @@ def list_orders(db: Session, status: str = "ALL") -> list[Order]:
         try:
             status_enum = OrderStatus(status)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
+            raise ValidationError(f"Invalid status: {status}", status=str(status)) from exc
         query = query.where(Order.status == status_enum)
     return list(db.execute(query).scalars().all())
 
@@ -92,7 +98,7 @@ def search_orders(
         try:
             status_enum = OrderStatus(status)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
+            raise ValidationError(f"Invalid status: {status}", status=str(status)) from exc
         conditions.append(Order.status == status_enum)
 
     if q:
@@ -143,7 +149,7 @@ def search_orders(
 def get_order(db: Session, order_id: int) -> Order:
     order = db.get(Order, order_id)
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise NotFoundError(entity="Order")
     return order
 
 
@@ -161,21 +167,21 @@ def create_order(db: Session, data: dict) -> Order:
     """
     items_data = data.get("items") or []
     if not items_data:
-        raise HTTPException(status_code=400, detail="An order must have at least one item")
+        raise ValidationError("An order must have at least one item")
 
     account = None
     if data.get("account_id"):
         account = b2b_service.get_account(db, int(data["account_id"]))
         if not account.is_active:
-            raise HTTPException(status_code=400, detail="That partner is inactive")
+            raise ValidationError("That partner is inactive")
         if not account.customer_id:
-            raise HTTPException(
-                status_code=400, detail="That partner has no billing customer attached"
+            raise ValidationError(
+                "That partner has no billing customer attached", account_id=account.id
             )
     else:
         customer = db.get(Customer, data["customer_id"])
         if not customer or not customer.is_active:
-            raise HTTPException(status_code=400, detail="Invalid or inactive customer")
+            raise ValidationError("Invalid or inactive customer")
 
     for attempt in range(2):
         try:
@@ -186,12 +192,9 @@ def create_order(db: Session, data: dict) -> Order:
         except IntegrityError as exc:
             db.rollback()
             if attempt == 1:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Order number conflict, please retry",
-                ) from exc
+                raise ConflictError("Order number conflict, please retry") from exc
 
-    raise HTTPException(status_code=500, detail="Unreachable")
+    raise UnreachableError("Order numbering retry loop fell through")
 
 
 def update_order(db: Session, order_id: int, data: dict) -> Order:
@@ -205,19 +208,19 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
     order = get_order(db, order_id)
 
     if order.status != OrderStatus.CONFIRMED:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Order cannot be edited in status {order.status.value}. "
+        raise StateError(
+            f"Order cannot be edited in status {order.status.value}. "
             "Only CONFIRMED orders are editable.",
+            status=order.status.value,
         )
 
     items_data = data.get("items") or []
     if not items_data:
-        raise HTTPException(status_code=400, detail="An order must have at least one item")
+        raise ValidationError("An order must have at least one item")
 
     fulfillment_date = _parse_dt(data.get("fulfillment_date"))
     if not fulfillment_date:
-        raise HTTPException(status_code=400, detail="Fulfillment date is required")
+        raise ValidationError("Fulfillment date is required")
 
     old_snapshot = {
         "fulfillment_date": order.fulfillment_date.isoformat() if order.fulfillment_date else None,
@@ -247,13 +250,13 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
     for idx, item_data in enumerate(items_data):
         product = db.get(Product, item_data["product_id"])
         if not product or not product.is_active:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid or inactive product: {item_data['product_id']}",
+            raise ValidationError(
+                f"Invalid or inactive product: {item_data['product_id']}",
+                product_id=item_data["product_id"],
             )
         qty = int(item_data["quantity"])
         if qty <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be positive")
+            raise ValidationError("Quantity must be positive")
 
         if priced_lines is not None:
             list_price = money(priced_lines[idx]["unit_price"])
@@ -283,12 +286,12 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
     new_total = money(new_total)
 
     if new_total < order.advance_paid:
-        raise HTTPException(
-            status_code=400,
-            detail=(
+        raise ValidationError(
+            (
                 f"Cannot reduce total below the amount already paid "
                 f"({order.advance_paid}). Process a refund separately."
             ),
+            advance_paid=str(order.advance_paid),
         )
 
     for old_item in list(order.items):
@@ -381,15 +384,16 @@ def update_status(
     try:
         target = OrderStatus(new_status)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}") from exc
+        raise ValidationError(f"Invalid status: {new_status}", status=str(new_status)) from exc
 
     if target == order.status:
         return order
 
     if not order.can_transition_to(target):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Illegal transition: {order.status.value} -> {target.value}",
+        raise StateError(
+            f"Illegal transition: {order.status.value} -> {target.value}",
+            from_status=order.status.value,
+            to_status=target.value,
         )
 
     old_status = order.status.value
@@ -441,15 +445,16 @@ def record_payment(
     order = get_order(db, order_id)
 
     if order.status == OrderStatus.CANCELLED:
-        raise HTTPException(status_code=400, detail="Cannot record payment on a cancelled order")
+        raise StateError("Cannot record payment on a cancelled order")
 
     amt = money(amount)
     if amt <= 0:
-        raise HTTPException(status_code=400, detail="Payment amount must be positive")
+        raise ValidationError("Payment amount must be positive", amount=str(amount))
     if amt > order.balance_due:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Payment exceeds balance due ({order.balance_due})",
+        raise ValidationError(
+            f"Payment exceeds balance due ({order.balance_due})",
+            amount=str(amt),
+            balance_due=str(order.balance_due),
         )
 
     payment = Payment(
@@ -636,10 +641,7 @@ def order_cogs(db: Session, order_id: int) -> Decimal:
 def _build_order(db: Session, data: dict, items_data: list[dict], account=None) -> Order:
     fulfillment_date = _parse_dt(data.get("fulfillment_date"))
     if not fulfillment_date:
-        raise HTTPException(
-            status_code=400,
-            detail="Fulfillment date is required",
-        )
+        raise ValidationError("Fulfillment date is required")
 
     # B2B orders are priced once, by the same evaluation the form quoted, so
     # the stored order and the preview can never disagree.
@@ -692,13 +694,13 @@ def _build_order(db: Session, data: dict, items_data: list[dict], account=None) 
         for item_data in items_data:
             product = db.get(Product, item_data["product_id"])
             if not product or not product.is_active:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid or inactive product: {item_data['product_id']}",
+                raise ValidationError(
+                    f"Invalid or inactive product: {item_data['product_id']}",
+                    product_id=item_data["product_id"],
                 )
             qty = int(item_data["quantity"])
             if qty <= 0:
-                raise HTTPException(status_code=400, detail="Quantity must be positive")
+                raise ValidationError("Quantity must be positive")
 
             # list_price is what the product is configured at. unit_price is
             # what was charged, which may differ (festival price, discount,
@@ -727,9 +729,9 @@ def _build_order(db: Session, data: dict, items_data: list[dict], account=None) 
 
     advance = money(data.get("advance_paid") or 0)
     if advance < 0:
-        raise HTTPException(status_code=400, detail="Advance cannot be negative")
+        raise ValidationError("Advance cannot be negative", advance=str(advance))
     if advance > total:
-        raise HTTPException(status_code=400, detail="Advance cannot exceed order total")
+        raise ValidationError("Advance cannot exceed order total", advance=str(advance), total=str(total))
 
     order.total_amount = money(total)
     order.advance_paid = advance
@@ -785,9 +787,9 @@ def _charged_price(item_data: dict, list_price: Decimal) -> Decimal:
     try:
         charged = money(Decimal(str(raw)))
     except (InvalidOperation, ValueError):
-        raise HTTPException(status_code=400, detail="Invalid price on an item") from None
+        raise ValidationError("Invalid price on an item") from None
     if charged <= 0:
-        raise HTTPException(status_code=400, detail="Price must be greater than zero")
+        raise ValidationError("Price must be greater than zero")
     return charged
 
 

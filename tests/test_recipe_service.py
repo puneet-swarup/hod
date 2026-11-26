@@ -3,8 +3,8 @@
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
 
+from app.domain import ConflictError, ValidationError
 from app.services import inventory_service as inv
 from app.services import recipe_service as rs
 
@@ -83,9 +83,9 @@ def test_negative_quantity_rejected(db):
     p = _product(db)
     ing = _ingredient(db, "Butter")
 
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(ValidationError) as ei:
         rs.upsert_recipe_line(db, p.id, ing.id, Decimal("-5"))
-    assert ei.value.status_code == 400
+    assert "positive" in ei.value.message.lower()
 
 
 def test_inactive_ingredient_rejected(db):
@@ -93,10 +93,9 @@ def test_inactive_ingredient_rejected(db):
     ing = _ingredient(db, "Old Ingredient")
     inv.delete_ingredient(db, ing.id)
 
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(ValidationError) as ei:
         rs.upsert_recipe_line(db, p.id, ing.id, Decimal("10"))
-    assert ei.value.status_code == 400
-    assert "inactive" in ei.value.detail.lower()
+    assert "inactive" in ei.value.message.lower()
 
 
 def test_remove_line(db):
@@ -228,7 +227,7 @@ def test_replace_recipe_rejects_duplicates(db):
     p = _product(db)
     a = _ingredient(db, "Dup")
 
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(ValidationError) as ei:
         rs.replace_recipe(
             db,
             p.id,
@@ -237,7 +236,8 @@ def test_replace_recipe_rejects_duplicates(db):
                 {"ingredient_id": a.id, "quantity_per_unit": "2"},
             ],
         )
-    assert ei.value.status_code == 400
+    assert "twice" in ei.value.message.lower()
+    assert ei.value.context["ingredient_id"] == a.id
 
 
 def test_replace_recipe_empty_clears(db):

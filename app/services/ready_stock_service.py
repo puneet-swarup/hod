@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.domain import NotFoundError, ValidationError
 from app.models import (
     MovementReason,
     Order,
@@ -156,11 +156,11 @@ def bake(db: Session, product_id: int, quantity: int, note: str | None = None) -
     materials.
     """
     if quantity <= 0:
-        raise HTTPException(status_code=400, detail="Quantity must be positive")
+        raise ValidationError("Quantity must be positive", quantity=quantity)
 
     product = db.get(Product, product_id)
     if product is None:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise NotFoundError(entity="Product")
 
     unit_cost = recipe_service.recipe_cost(db, product_id).quantize(Decimal("0.01"))
 
@@ -201,16 +201,15 @@ def adjust(
 ) -> int:
     """Manual correction: wastage (-), a miscount (+/-), or a return (+)."""
     if delta == 0:
-        raise HTTPException(status_code=400, detail="Nothing to adjust")
+        raise ValidationError("Nothing to adjust")
     if reason in {ProductMovementReason.PRODUCTION, ProductMovementReason.SALE}:
-        raise HTTPException(
-            status_code=400,
-            detail="Use the bake or order flow for production and sales",
+        raise ValidationError(
+            "Use the bake or order flow for production and sales", reason=reason.value
         )
 
     product = db.get(Product, product_id)
     if product is None:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise NotFoundError(entity="Product")
 
     _add(
         db,

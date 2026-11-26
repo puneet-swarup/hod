@@ -419,7 +419,109 @@ one row per order, downloadable as CSV for the monthly chase.
 
 ---
 
-## 8. Invoices
+## 8. Costing & Pricing
+
+The app can tell you what a product **costs to make** and what you should
+**charge for it**. It needs two things first: what your ingredients cost,
+and what goes into each product.
+
+### 8.1 Enter ingredients
+
+**Costing → Bulk entry**, first box. One line per ingredient:
+
+```
+Dark chocolate, g, 0.45
+Butter, g, 0.55
+Sugar, g, 0.045
+Eggs, no, 7
+```
+
+`name, unit, cost per unit` — the cost is for **one** unit, so ₹0.45 for a
+gram of chocolate, not ₹450 for a kilo. This is the single most common
+mistake, and it makes every cost on the sheet wrong.
+
+### 8.2 Enter a recipe
+
+Second box on the same page:
+
+```
+Nutella Brownie, Dark chocolate, 1200, 24
+Nutella Brownie, Butter, 800, 24
+```
+
+`family, ingredient, quantity, batch yield`. The last column is optional and
+defaults to 24. The quantity is in the ingredient's own unit — grams for
+chocolate, a count for eggs.
+
+**One recipe per product, not per size.** A recipe describes a *batch* —
+one tray of 24 brownies. Every size is costed from it automatically: the
+9-piece box is that batch divided by 24 and multiplied by 9. Adding a
+12-piece box later costs nothing.
+
+Both boxes are **all or nothing**: if one line is wrong, nothing is saved
+and the page tells you which line.
+
+### 8.3 Read the cost sheet
+
+**Costing →** tap a product. The sheet shows:
+
+| Line | What it is |
+|---|---|
+| Material | ingredients, scaled from the batch to this size |
+| Packaging | set per size on the same page — a 9-piece box is one box |
+| Labour | the batch's minutes ÷ yield × pieces, at your hourly rate |
+| Overhead | electricity, gas, depreciation for the batch, scaled |
+| Wastage | spoilage and trim, as a % of material + labour |
+| **Total cost** | what one of these actually costs you |
+
+Below it: the selling price, the gross margin in rupees and as a
+percentage, the markup, and the break-even price.
+
+**If a product has no recipe, the sheet says the cost is unknown — not
+zero.** A zero would read as a 100% margin, which is a lie.
+
+### 8.4 Choose a price
+
+The sheet offers three routes, side by side:
+
+| Method | Means |
+|---|---|
+| **40% margin** | 40% of the *price* is profit |
+| **50% markup** | 50% on top of *cost* — which is only a 33% margin |
+| **At the price you charge** | take your current price and see what it yields |
+
+Margin and markup are **not the same number**, and mixing them is the most
+expensive mistake in this trade. A 50% markup earns a 33.3% margin.
+
+Prices are rounded **up** to ₹5 or ₹10 (Costing → Assumptions). Never down —
+rounding down to make a price tidy gives away margin on every sale.
+
+Nothing changes a price by itself. Pressing **Use** writes the new price and
+records it in the audit log.
+
+### 8.5 Assumptions
+
+**Costing → Assumptions** holds the numbers used everywhere: labour rate per
+hour, default wastage, target margin, whether prices are before or after
+GST, and how suggestions are rounded.
+
+If you are not registered for GST, the rate is zero and the sheet says so —
+including what the customer would pay at 5%, which is the price list you
+will need the day you register.
+
+### 8.6 Two different margins — do not confuse them
+
+| Margin | Means | Where |
+|---|---|---|
+| **Recipe margin** | price − (material + labour + overhead + wastage), at today's costs | Costing screens |
+| **Reported margin** | revenue − cost actually booked from stock | Monthly report |
+
+They will differ, and both are right: one is a planning number, the other is
+what the books recorded.
+
+---
+
+## 9. Invoices
 
 ### Viewing an Invoice
 
@@ -458,7 +560,7 @@ Printed on 80mm (or 58mm) roll paper. Shows:
 
 ---
 
-## 9. Export
+## 10. Export
 
 **URL:** `/export`
 
@@ -482,7 +584,7 @@ Opens directly in Excel. Columns are comma-separated. Use for:
 
 ---
 
-## 10. Audit Log
+## 11. Audit Log
 
 **URL:** `/audit`
 
@@ -524,7 +626,7 @@ All | Orders | Payments | Customers | Products
 
 ---
 
-## 11. Settings
+## 12. Settings
 
 **URL:** `/settings`
 
@@ -548,7 +650,7 @@ GSTIN=
 PHONE=+91 98765 43210   
 ```
 
-## 12. Data Relationships
+## 13. Data Relationships
 ```mermaid
 ┌──────────────┐       ┌──────────────┐
 │  CUSTOMERS   │       │  ADDRESSES   │
@@ -631,7 +733,7 @@ PHONE=+91 98765 43210
 | Payment | **Never deleted.** Immutable financial record. |
 | Invoice | **Never deleted.** Immutable financial record. |
 
-## 13. FAQ & Troubleshooting
+## 14. FAQ & Troubleshooting
 #### "Why can't I select a customer in the order form?"
 You need at least 2 characters in the search box. Also, the customer must be active (not deleted).
 

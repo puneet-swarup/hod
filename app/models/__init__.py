@@ -12,6 +12,7 @@ from app.models.b2b import (
     PaymentTerms,
     PricingMode,
 )
+from app.models.costing import CostingSettings, ProductPackaging, Recipe, RecipeLine
 from app.models.customer import Customer
 from app.models.ingredient import Ingredient, IngredientKind
 from app.models.invoice import Invoice
@@ -46,6 +47,10 @@ __all__ = [
     "Payment",
     "Product",
     "ProductIngredient",
+    "Recipe",
+    "RecipeLine",
+    "ProductPackaging",
+    "CostingSettings",
     "ProductMovementReason",
     "ProductStockMovement",
     "StockMovement",

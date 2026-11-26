@@ -3,8 +3,8 @@
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
 
+from app.domain import DomainError
 from app.utils import units
 
 
@@ -29,13 +29,13 @@ def test_l_to_ml():
 
 
 def test_mass_to_volume_rejected():
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         units.convert(Decimal("100"), "g", "ml")
-    assert ei.value.status_code == 400
+    assert ei.value
 
 
 def test_count_units_are_their_own_group():
-    with pytest.raises(HTTPException):
+    with pytest.raises(DomainError):
         units.convert(Decimal("1"), "pcs", "packets")
 
 

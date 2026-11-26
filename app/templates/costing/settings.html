@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Costing assumptions — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">Costing assumptions</h1>
+        <a href="/costing/" class="btn btn-ghost btn-sm">← Costing</a>
+    </div>
+
+    <form method="post" action="/costing/settings" class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-4">
+
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Labour rate (₹ per hour)</span></label>
+                <input type="number" step="0.01" min="0" name="labour_rate_per_hour"
+                       value="{{ costing.labour_rate_per_hour }}"
+                       class="input input-bordered w-full" />
+                <label class="label"><span class="label-text-alt text-base-content/50">
+                    What an hour of work in the kitchen is worth. It is charged by the
+                    minutes recorded on each recipe.
+                </span></label>
+            </div>
+
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Default wastage (%)</span></label>
+                <input type="number" step="0.01" min="0" max="99" name="default_wastage_pct"
+                       value="{{ costing.default_wastage_pct }}"
+                       class="input input-bordered w-full" />
+                <label class="label"><span class="label-text-alt text-base-content/50">
+                    Spoilage and trim, applied to material plus labour. A recipe may
+                    override it.
+                </span></label>
+            </div>
+
+            <div class="form-control">
+                <label class="label"><span class="label-text font-semibold">Target margin (%)</span></label>
+                <input type="number" step="0.01" min="0" max="99" name="target_margin_pct"
+                       value="{{ costing.target_margin_pct }}"
+                       class="input input-bordered w-full" />
+                <label class="label"><span class="label-text-alt text-base-content/50">
+                    A share of the <em>price</em>, not of the cost. A 40% target margin is
+                    a 67% markup.
+                </span></label>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Prices are</span></label>
+                    <select name="gst_mode" class="select select-bordered w-full">
+                        <option value="exclusive" {% if costing.gst_mode == 'exclusive' %}selected{% endif %}>
+                            Before GST
+                        </option>
+                        <option value="inclusive" {% if costing.gst_mode == 'inclusive' %}selected{% endif %}>
+                            Including GST
+                        </option>
+                    </select>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Round suggested prices</span></label>
+                    <select name="price_rounding" class="select select-bordered w-full">
+                        <option value="none" {% if costing.price_rounding == 'none' %}selected{% endif %}>Exact</option>
+                        <option value="five" {% if costing.price_rounding == 'five' %}selected{% endif %}>To ₹5</option>
+                        <option value="ten" {% if costing.price_rounding == 'ten' %}selected{% endif %}>To ₹10</option>
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-amber font-semibold">Save assumptions</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

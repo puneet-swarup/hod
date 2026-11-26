@@ -4,11 +4,12 @@ Order routes. HTTP only; business logic in order_service.
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.domain import DomainError
 from app.models import B2bAccount, Customer, OrderStatus, Product
 from app.services import b2b_service, invoice_service, order_service
 from app.utils.time import business_now
@@ -132,7 +133,8 @@ def new_order_form(
     if from_order_id is not None:
         try:
             src = order_service.get_order(db, from_order_id)
-        except HTTPException:
+        except DomainError:
+            # A stale link is not an error — fall back to a blank form.
             src = None
         if src and src.status != OrderStatus.CANCELLED:
             preset_customer_id = src.customer_id

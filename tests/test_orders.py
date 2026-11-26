@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.config import get_settings
+from app.domain import DomainError
 from app.models import Order, OrderStatus
 
 
@@ -99,13 +100,12 @@ def test_full_payment_clears_balance_without_auto_status(db_session, sample_orde
 
 def test_settle_requires_delivered(db_session, sample_order):
     """PAID is no longer a fulfillment status — it is rejected."""
-    from fastapi import HTTPException
 
     from app.services.order_service import update_status
 
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         update_status(db_session, sample_order.id, "PAID")
-    assert ei.value.status_code == 400
+    assert ei.value
 
 
 def test_delivered_is_terminal_fulfillment(db_session, sample_order):
@@ -190,11 +190,10 @@ def test_export_orders_includes_delivery_type(client, db_session, sample_order):
 
 def test_order_requires_fulfillment_date(db, customer, product):
     import pytest
-    from fastapi import HTTPException
 
     from app.services.order_service import create_order
 
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         create_order(
             db,
             {
@@ -203,5 +202,5 @@ def test_order_requires_fulfillment_date(db, customer, product):
                 # no fulfillment_date
             },
         )
-    assert ei.value.status_code == 400
-    assert "Fulfillment" in ei.value.detail
+    assert ei.value
+    assert "Fulfillment" in ei.value.message

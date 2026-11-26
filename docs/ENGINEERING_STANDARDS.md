@@ -158,7 +158,6 @@ above, with a reason and a trigger for revisiting.
 
 | Deviation | Reality | Why it stands | Revisit when |
 |---|---|---|---|
-| **Services raise `HTTPException`** | All 8 services import FastAPI; ~97 raise sites | It is idiomatic FastAPI, keeps the code short, and the app is HTTP-only. A domain-exception layer would touch every service for no behavioural gain today | If a service is ever called from a worker, a CLI or a second transport |
 | **`app/schemas/product.py` at 0%** | 28 statements untested | The router validates through Pydantic and the service through its own guards, so the schema is currently a thin duplicate | Before it grows behaviour |
 | **`escpos_printer.py` at 43%** | 85 statements untested | It talks to hardware; the untested paths are device-specific branches | If a second printer model is supported |
 | **`sku.py` at 68%** | 20 statements untested | Collision handling is rare-path | Before the bulk import grows |

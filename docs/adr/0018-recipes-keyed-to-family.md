@@ -1,6 +1,6 @@
 # 0018 — Recipes keyed to a product family, not to a product
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-26
 **Deciders:** Owner
 **Related:** [0016](0016-b2b-channel-additive-layer.md), [`docs/ENGINEERING_STANDARDS.md`](../ENGINEERING_STANDARDS.md), [`docs/design/costing-and-pricing-module.md`](../design/costing-and-pricing-module.md)

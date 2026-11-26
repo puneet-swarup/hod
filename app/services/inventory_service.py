@@ -15,11 +15,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domain import ConflictError, NotFoundError, ValidationError
 from app.models import (
     Ingredient,
     IngredientKind,
@@ -50,7 +50,7 @@ def list_ingredients(
 def get_ingredient(db: Session, ingredient_id: int) -> Ingredient:
     ing = db.get(Ingredient, ingredient_id)
     if not ing:
-        raise HTTPException(status_code=404, detail="Ingredient not found")
+        raise NotFoundError(entity="Ingredient")
     return ing
 
 
@@ -119,9 +119,8 @@ def create_ingredient(db: Session, data: dict) -> Ingredient:
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ingredient '{data.get('name')}' already exists",
+        raise ConflictError(
+            f"Ingredient '{data.get('name')}' already exists", name=data.get("name")
         ) from exc
 
     log_action(
@@ -150,9 +149,8 @@ def update_ingredient(db: Session, ingredient_id: int, data: dict) -> Ingredient
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ingredient '{data.get('name')}' already exists",
+        raise ConflictError(
+            f"Ingredient '{data.get('name')}' already exists", name=data.get("name")
         ) from exc
 
     log_action(
@@ -215,17 +213,17 @@ def record_movement(
     try:
         delta_d = Decimal(str(delta))
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid delta: {delta}") from exc
+        raise ValidationError(f"Invalid delta: {delta}", delta=str(delta)) from exc
 
     if delta_d == 0:
-        raise HTTPException(status_code=400, detail="Delta cannot be zero")
+        raise ValidationError("Delta cannot be zero")
 
     reason_e = _coerce_reason(reason)
 
     if reason_e in (MovementReason.PURCHASE, MovementReason.RETURN) and delta_d < 0:
-        raise HTTPException(status_code=400, detail=f"{reason_e.value} must have a positive delta")
+        raise ValidationError(f"{reason_e.value} must have a positive delta", reason=reason_e.value)
     if reason_e in (MovementReason.CONSUMPTION, MovementReason.WASTAGE) and delta_d > 0:
-        raise HTTPException(status_code=400, detail=f"{reason_e.value} must have a negative delta")
+        raise ValidationError(f"{reason_e.value} must have a negative delta", reason=reason_e.value)
 
     cost = Decimal(str(unit_cost)) if unit_cost is not None else ing.cost_per_unit
     total_cost = cost * abs(delta_d)
@@ -282,7 +280,7 @@ def _coerce_kind(value) -> IngredientKind:
     try:
         return IngredientKind(value)
     except (ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid kind: {value}") from exc
+        raise ValidationError(f"Invalid kind: {value}", value=str(value)) from exc
 
 
 def _coerce_reason(value) -> MovementReason:
@@ -291,4 +289,4 @@ def _coerce_reason(value) -> MovementReason:
     try:
         return MovementReason(value)
     except (ValueError, TypeError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid reason: {value}") from exc
+        raise ValidationError(f"Invalid reason: {value}", value=str(value)) from exc

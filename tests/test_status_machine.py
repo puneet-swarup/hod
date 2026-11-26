@@ -1,8 +1,8 @@
 """Status transitions: only legal ones allowed."""
 
 import pytest
-from fastapi import HTTPException
 
+from app.domain import DomainError
 from app.models import OrderStatus
 from app.services.order_service import create_order, update_status
 
@@ -30,9 +30,9 @@ def test_legal_transition(db, customer, product):
 def test_illegal_transition_rejected(db, customer, product):
     o = _new_order(db, customer, product)
     update_status(db, o.id, "CANCELLED")
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         update_status(db, o.id, "IN_PROGRESS")
-    assert ei.value.status_code == 400
+    assert ei.value
 
 
 def test_delivered_is_terminal(db, customer, product):
@@ -42,12 +42,12 @@ def test_delivered_is_terminal(db, customer, product):
     o = update_status(db, o.id, "DELIVERED")
     # DELIVERED is the success terminal state; payment is a separate axis.
     assert o.status == OrderStatus.DELIVERED
-    with pytest.raises(HTTPException):
+    with pytest.raises(DomainError):
         update_status(db, o.id, "INQUIRY")
 
 
 def test_bad_status_value(db, customer, product):
     o = _new_order(db, customer, product)
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         update_status(db, o.id, "BOGUS")
-    assert ei.value.status_code == 400
+    assert ei.value

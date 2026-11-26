@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
 from app.database import Base, engine
+from app.errors import register_domain_error_handler
 from app.middleware import NoCacheMiddleware
 from app.utils.time import to_business_tz
 
@@ -89,6 +90,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
+
+# Domain failures become HTTP responses here, and only here.
+register_domain_error_handler(app)
 
 # No-cache headers for HTML responses
 app.add_middleware(NoCacheMiddleware)
@@ -169,6 +173,7 @@ app.state.settings = settings
 from app.routers import (  # noqa: E402
     audit,
     b2b,
+    costing,
     customers,
     dashboard,
     export,
@@ -188,6 +193,7 @@ app.include_router(orders.router, prefix="/orders", tags=["orders"])
 app.include_router(customers.router, prefix="/customers", tags=["customers"])
 app.include_router(b2b.router, prefix="/b2b", tags=["b2b"])
 app.include_router(stock.router, prefix="/stock", tags=["stock"])
+app.include_router(costing.router, prefix="/costing", tags=["costing"])
 app.include_router(products.router, prefix="/products", tags=["products"])
 app.include_router(ingredients.router, prefix="/ingredients", tags=["ingredients"])
 app.include_router(invoices.router, prefix="/invoices", tags=["invoices"])

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Bulk entry — costing{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">Bulk entry</h1>
+        <a href="/costing/" class="btn btn-ghost btn-sm">← Costing</a>
+    </div>
+
+    <p class="text-sm text-base-content/60">
+        Costing needs two things: what the ingredients cost, and what goes into each product.
+        Pasting them is the difference between a module that gets used and one that does not.
+    </p>
+
+    {% if errors %}
+    <div class="alert alert-error text-sm">
+        <div>
+            <p class="font-semibold">Nothing was imported — {{ errors|length }} problem(s):</p>
+            <ul class="list-disc ml-5 mt-1 space-y-0.5">
+                {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if request.query_params.get('ingredients') %}
+    <div class="alert alert-success text-sm py-2">
+        <span>{{ request.query_params.get('ingredients') }} ingredient(s) added.</span>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('recipes') %}
+    <div class="alert alert-success text-sm py-2">
+        <span>{{ request.query_params.get('recipes') }} recipe(s) saved.</span>
+    </div>
+    {% endif %}
+
+    <!-- Ingredients -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-3">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">1 · Ingredients</h2>
+            <p class="text-sm">
+                <code class="text-xs">name, unit, cost per unit</code> — one per line.
+                The cost is for <em>one</em> unit, so ₹0.45 for a gram of chocolate, not ₹450 for a kilo.
+            </p>
+            <pre class="bg-base-200 rounded-lg p-3 text-xs overflow-x-auto">Dark chocolate, g, 0.45
+Butter, g, 0.55
+Sugar, g, 0.045
+Eggs, no, 7
+Maida, g, 0.04
+Nutella, g, 0.38
+Walnuts, g, 0.90</pre>
+
+            <form method="post" action="/costing/import/ingredients" class="space-y-2">
+                <textarea name="rows" rows="8" required
+                          class="textarea textarea-bordered w-full font-mono text-sm"
+                          placeholder="Dark chocolate, g, 0.45">{{ raw_ingredients or '' }}</textarea>
+                <button type="submit" class="btn btn-amber btn-sm font-semibold">Import ingredients</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Recipes -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-3">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">2 · Recipes</h2>
+            <p class="text-sm">
+                <code class="text-xs">family, ingredient, quantity, batch yield</code> — the batch yield
+                is optional and defaults to 24. Rows with the same family become one recipe,
+                and every size of that product is costed from it.
+            </p>
+            <p class="text-xs text-base-content/50">
+                The ingredient must already exist — paste the ingredients above first.
+                Quantities are in the ingredient's own unit.
+            </p>
+            <pre class="bg-base-200 rounded-lg p-3 text-xs overflow-x-auto">Nutella Brownie, Dark chocolate, 1200, 24
+Nutella Brownie, Butter, 800, 24
+Nutella Brownie, Sugar, 600, 24
+Nutella Brownie, Eggs, 12, 24
+Nutella Brownie, Maida, 300, 24
+Nutella Brownie, Nutella, 800, 24
+Nutella Brownie, Walnuts, 200, 24</pre>
+
+            <form method="post" action="/costing/import/recipes" class="space-y-2">
+                <textarea name="rows" rows="10" required
+                          class="textarea textarea-bordered w-full font-mono text-sm"
+                          placeholder="Nutella Brownie, Dark chocolate, 1200, 24">{{ raw_recipes or '' }}</textarea>
+                <button type="submit" class="btn btn-amber btn-sm font-semibold">Import recipes</button>
+            </form>
+            <p class="text-xs text-base-content/50">
+                All or nothing: if any line is wrong, nothing is saved.
+                Labour, overhead and wastage are set per recipe on the cost sheet afterwards.
+            </p>
+        </div>
+    </div>
+
+    {% if recipes %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-2">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Recipes on file</h2>
+            {% for r in recipes %}
+            <div class="flex justify-between text-sm">
+                <span>{{ r.name }}</span>
+                <span class="text-base-content/60">
+                    {{ r.lines|length }} ingredient{{ '' if r.lines|length == 1 else 's' }} · yields {{ r.yield_pieces }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

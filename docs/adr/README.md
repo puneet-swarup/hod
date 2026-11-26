@@ -29,4 +29,5 @@ We use the **Nygard template**: Status → Context → Decision → Consequences
 | [0015](0015-store-utc-display-ist.md) | Store UTC, Display in the Business Timezone | Accepted | 2026-11-21 |
 | [0016](0016-b2b-channel-additive-layer.md) | B2B Channel as an Additive Layer Over Retail Orders | Accepted | 2026-11-21 |
 | [0017](0017-order-date-is-a-local-date.md) | `order_date` Is a Local Calendar Date | Accepted | 2026-11-21 |
-| [0018](0018-recipes-keyed-to-family.md) | Recipes Keyed to a Product Family, Not a Product | Proposed | 2026-11-26 |
+| [0018](0018-recipes-keyed-to-family.md) | Recipes Keyed to a Product Family, Not a Product | Accepted | 2026-11-26 |
+| [0019](0019-pricing-methods.md) | Three Named Pricing Methods, and Rounding That Only Goes Up | Accepted | 2026-11-26 |

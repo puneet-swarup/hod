@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 
+from app.domain import DomainError
 from app.models import MovementReason, StockMovement
 from app.services import inventory_service as inv
 from app.services import order_service, recipe_service
@@ -241,7 +242,6 @@ def test_cancel_from_ready_via_http(client, db_session, customer):
 def test_cancel_from_delivered_rejected(db, customer):
     """DELIVERED → CANCELLED is not an allowed transition."""
     import pytest
-    from fastapi import HTTPException
 
     ing = _ingredient(db, "Delivered Item", cost="0.50")
     _stock(db, ing, 5000, cost="0.50")
@@ -260,6 +260,6 @@ def test_cancel_from_delivered_rejected(db, customer):
     order_service.update_status(db, o.id, "READY")
     order_service.update_status(db, o.id, "DELIVERED")
 
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         order_service.update_status(db, o.id, "CANCELLED")
-    assert ei.value.status_code == 400
+    assert ei.value

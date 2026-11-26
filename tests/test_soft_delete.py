@@ -15,11 +15,13 @@ def test_customer_phone_reusable_after_delete(db):
 
 
 def test_duplicate_active_phone_rejected(db):
-    from fastapi import HTTPException
+    from app.domain import ConflictError
 
     create_customer(db, {"name": "A", "phone": "2222222222"})
-    with pytest.raises(HTTPException):
+    with pytest.raises(ConflictError) as exc:
         create_customer(db, {"name": "B", "phone": "2222222222"})
+    # The domain names the field it rejected, without knowing about HTTP.
+    assert exc.value.context["phone"] == "2222222222"
 
 
 def test_product_sku_reusable_after_delete(db):

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Costing — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-3xl mx-auto">
+
+    <div class="flex justify-between items-start flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">Costing</h1>
+            <p class="text-sm text-base-content/60">
+                What each product costs to make, and what that implies about price.
+            </p>
+        </div>
+        <div class="flex gap-2">
+            <a href="/costing/import" class="btn btn-outline btn-sm">Bulk entry</a>
+            <a href="/costing/settings" class="btn btn-outline btn-sm">Assumptions</a>
+        </div>
+    </div>
+
+    {% if request.query_params.get('settings') %}
+    <div class="alert alert-success text-sm py-2"><span>Assumptions saved.</span></div>
+    {% endif %}
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+            <p class="text-sm">
+                <strong>{{ costed }}</strong> of <strong>{{ total }}</strong> products have a recipe.
+                {% if costed < total %}
+                <span class="text-base-content/60">
+                    The rest cannot be costed — a recipe is what tells the app what goes into them.
+                </span>
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-2">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Products</h2>
+
+            <div class="space-y-1">
+                {% for row in rows %}
+                <div class="flex items-center gap-2 py-2 border-b border-base-200 last:border-0">
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold truncate">{{ row.name }}</p>
+                        <p class="text-xs text-base-content/60">
+                            {{ row.products|length }} size{{ '' if row.products|length == 1 else 's' }}
+                            {% if row.recipe %}
+                            · yields {{ row.recipe.yield_pieces }} per batch
+                            {% else %}
+                            · <span class="text-warning">no recipe yet</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <a href="/costing/{{ row.products[0].id }}"
+                       class="btn btn-xs {{ 'btn-outline' if row.costed else 'btn-amber' }} shrink-0">
+                        {{ 'View' if row.costed else 'Add recipe' }}
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

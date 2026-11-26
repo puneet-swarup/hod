@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong — {{ settings.app_name if settings else 'Error' }}{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto mt-10">
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body items-center text-center space-y-3">
+            <p class="text-5xl font-extrabold text-error">500</p>
+            <p class="text-lg">Something went wrong on our side.</p>
+            <p class="text-sm text-base-content/60">
+                This is not something you did. If it keeps happening, the
+                deployment log has the details.
+            </p>
+            <a href="/" class="btn btn-amber btn-sm font-semibold mt-2">Go home</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

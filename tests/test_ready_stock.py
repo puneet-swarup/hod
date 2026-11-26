@@ -86,9 +86,10 @@ def test_baking_without_a_recipe_still_adds_stock(db, sample_product):
 
 def test_baking_zero_or_negative_is_refused(db, sample_product):
     import pytest
-    from fastapi import HTTPException
 
-    with pytest.raises(HTTPException):
+    from app.domain import ValidationError
+
+    with pytest.raises(ValidationError):
         ready_stock_service.bake(db, sample_product.id, 0)
 
 

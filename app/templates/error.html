@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ status }} — {{ settings.app_name if settings else 'Error' }}{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto mt-10">
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body items-center text-center space-y-3">
+            <p class="text-5xl font-extrabold text-amber-900">{{ status }}</p>
+            <p class="text-lg">{{ message }}</p>
+
+            {% if context %}
+            <p class="text-xs text-base-content/50 font-mono">
+                {% for key, value in context.items() %}{{ key }}={{ value }}{% if not loop.last %} · {% endif %}{% endfor %}
+            </p>
+            {% endif %}
+
+            <div class="flex gap-2 mt-2">
+                <a href="/" class="btn btn-amber btn-sm font-semibold">Go home</a>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="history.back()">Back</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

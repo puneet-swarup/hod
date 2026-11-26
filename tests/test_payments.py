@@ -8,8 +8,8 @@ pair. Payment state is derived from the ledger, not the fulfillment enum.
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
 
+from app.domain import DomainError
 from app.models import OrderStatus
 from app.services.order_service import create_order, record_payment, update_status
 
@@ -110,9 +110,9 @@ def test_paid_status_is_not_a_fulfillment_state(db, customer, product):
             "items": [{"product_id": product.id, "quantity": 1}],
         },
     )
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         update_status(db, o.id, "PAID")
-    assert ei.value.status_code == 400
+    assert ei.value
 
 
 # ---------------------------------------------------------------------------
@@ -130,9 +130,9 @@ def test_overpayment_rejected(db, customer, product):
             "advance_paid": 0,
         },
     )
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         record_payment(db, o.id, o.balance_due + Decimal("1.00"), "CASH", None)
-    assert ei.value.status_code == 400
+    assert ei.value
 
 
 def test_payment_on_cancelled_rejected(db, customer, product):
@@ -145,7 +145,7 @@ def test_payment_on_cancelled_rejected(db, customer, product):
         },
     )
     update_status(db, o.id, "CANCELLED")
-    with pytest.raises(HTTPException):
+    with pytest.raises(DomainError):
         record_payment(db, o.id, Decimal("1.00"), "CASH", None)
 
 

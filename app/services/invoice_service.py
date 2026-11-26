@@ -12,12 +12,12 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.domain import ConflictError, NotFoundError, UnreachableError, ValidationError
 from app.models import Invoice, Order
 from app.services.numbering import next_invoice_number
 from app.utils import escpos_printer
@@ -39,9 +39,9 @@ def create_invoice(db: Session, order_id: int) -> Invoice:
 
     order = db.get(Order, order_id)
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise NotFoundError(entity="Order")
     if not order.items:
-        raise HTTPException(status_code=400, detail="Cannot invoice an order with no items")
+        raise ValidationError("Cannot invoice an order with no items")
 
     for attempt in range(2):
         try:
@@ -52,12 +52,9 @@ def create_invoice(db: Session, order_id: int) -> Invoice:
         except IntegrityError as exc:
             db.rollback()
             if attempt == 1:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Invoice number conflict, please retry",
-                ) from exc
+                raise ConflictError("Invoice number conflict, please retry") from exc
 
-    raise HTTPException(status_code=500, detail="Unreachable")
+    raise UnreachableError("Invoice numbering retry loop fell through")
 
 
 def _build_invoice(db: Session, order: Order) -> Invoice:
@@ -136,7 +133,7 @@ def _build_invoice(db: Session, order: Order) -> Invoice:
 def get_invoice(db: Session, invoice_id: int) -> Invoice:
     invoice = db.get(Invoice, invoice_id)
     if not invoice:
-        raise HTTPException(status_code=404, detail="Invoice not found")
+        raise NotFoundError(entity="Invoice")
     return invoice
 
 

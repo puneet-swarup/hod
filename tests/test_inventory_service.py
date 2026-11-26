@@ -3,8 +3,8 @@
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
 
+from app.domain import ConflictError, ValidationError
 from app.models import IngredientKind, MovementReason
 from app.services import inventory_service as inv
 
@@ -34,9 +34,9 @@ def test_create_ingredient(db):
 
 def test_duplicate_name_rejected(db):
     _mk(db, name="Butter")
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(ConflictError) as ei:
         _mk(db, name="Butter")
-    assert ei.value.status_code == 400
+    assert ei.value.context["name"] == "Butter"
 
 
 def test_update_ingredient(db):
@@ -107,21 +107,21 @@ def test_wastage_decreases_on_hand(db):
 
 def test_purchase_must_be_positive(db):
     ing = _mk(db)
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(ValidationError) as ei:
         inv.record_movement(db, ing.id, delta=Decimal("-100"), reason=MovementReason.PURCHASE)
-    assert ei.value.status_code == 400
+    assert "positive" in ei.value.message.lower()
 
 
 def test_consumption_must_be_negative(db):
     ing = _mk(db)
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(ValidationError) as ei:
         inv.record_movement(db, ing.id, delta=Decimal("100"), reason=MovementReason.CONSUMPTION)
-    assert ei.value.status_code == 400
+    assert "negative" in ei.value.message.lower()
 
 
 def test_zero_delta_rejected(db):
     ing = _mk(db)
-    with pytest.raises(HTTPException):
+    with pytest.raises((ValidationError, ConflictError)):
         inv.record_movement(db, ing.id, delta=Decimal("0"), reason=MovementReason.ADJUSTMENT)
 
 

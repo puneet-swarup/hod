@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domain import ConflictError, NotFoundError
 from app.models import Product
 from app.services.audit_service import log_action
 from app.utils.sku import normalize_measure, unique_sku, validate_sku_format
@@ -15,7 +15,7 @@ from app.utils.sku import normalize_measure, unique_sku, validate_sku_format
 def get_product(db: Session, product_id: int) -> Product:
     product = db.get(Product, product_id)
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise NotFoundError(entity="Product")
     return product
 
 
@@ -60,9 +60,9 @@ def create_product(db: Session, data: dict) -> Product:
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"SKU '{payload.get('sku')}' is already in use by an active product",
+        raise ConflictError(
+            f"SKU '{payload.get('sku')}' is already in use by an active product",
+            sku=payload.get("sku"),
         ) from exc
 
     log_action(
@@ -97,9 +97,9 @@ def update_product(db: Session, product_id: int, data: dict) -> Product:
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"SKU '{payload.get('sku')}' is already in use by an active product",
+        raise ConflictError(
+            f"SKU '{payload.get('sku')}' is already in use by an active product",
+            sku=payload.get("sku"),
         ) from exc
 
     log_action(

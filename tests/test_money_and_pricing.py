@@ -15,8 +15,8 @@ from datetime import timedelta
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
 
+from app.domain import DomainError
 from app.services import order_service, reports_service
 from app.utils.time import business_now
 
@@ -70,15 +70,15 @@ def test_no_override_means_list_price(db, sample_customer, sample_product):
 
 
 def test_a_price_of_zero_is_refused(db, sample_customer, sample_product):
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(DomainError) as exc:
         _order(db, sample_customer, sample_product, price=0)
-    assert exc.value.status_code == 400
+    assert exc.value
 
 
 def test_a_nonsense_price_is_refused(db, sample_customer, sample_product):
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(DomainError) as exc:
         _order(db, sample_customer, sample_product, price="not a number")
-    assert exc.value.status_code == 400
+    assert exc.value
 
 
 def test_the_report_lists_what_was_sold_away_from_list(db, sample_customer, sample_product):

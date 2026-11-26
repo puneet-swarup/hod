@@ -16,7 +16,7 @@ field on Product) and does not belong in unit conversion.
 
 from decimal import Decimal
 
-from fastapi import HTTPException
+from app.domain import ValidationError
 
 MASS = "MASS"
 VOLUME = "VOLUME"
@@ -61,18 +61,19 @@ def are_compatible(a: str | None, b: str | None) -> bool:
 def convert(qty: Decimal, from_unit: str | None, to_unit: str | None) -> Decimal:
     """
     Convert qty from one unit to another. Both units must be in the
-    same group, otherwise raises HTTPException(400).
+    same group, otherwise raises ValidationError.
     """
     f = normalize(from_unit)
     t = normalize(to_unit)
     if not f or not t:
-        raise HTTPException(status_code=400, detail="Unit is required")
+        raise ValidationError("Unit is required")
     if f == t:
         return qty
     if not are_compatible(f, t):
-        raise HTTPException(
-            status_code=400,
-            detail=(f"Cannot convert '{from_unit}' to '{to_unit}' — different unit groups"),
+        raise ValidationError(
+            f"Cannot convert '{from_unit}' to '{to_unit}' — different unit groups",
+            from_unit=from_unit,
+            to_unit=to_unit,
         )
     return qty * _TO_BASE[f] / _TO_BASE[t]
 

@@ -86,3 +86,10 @@ over the credit limit. Nothing in it is real; it is safe to break.
 - `mono` is something you type, or a code like `SWEET-BAN`.
 - Screenshots are 390 px wide — the phone the bakery actually uses.
 - Every guide ends with a troubleshooting table and a routine checklist.
+
+### Costing & pricing
+
+`costing-and-pricing.md` — entering ingredients and recipes in bulk, reading
+a cost sheet, and choosing a price from the three methods. Written for the
+owner, with the one mistake that ruins every number (cost per *kilo* where
+the app wants cost per *gram*) called out first.

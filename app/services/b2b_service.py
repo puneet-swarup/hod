@@ -18,12 +18,12 @@ import re
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
-from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
+from app.domain import ConflictError, NotFoundError, ValidationError
 from app.models import (
     AccountKind,
     B2bAccount,
@@ -58,7 +58,7 @@ _DOW = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
 def get_account(db: Session, account_id: int) -> B2bAccount:
     account = db.get(B2bAccount, account_id)
     if not account:
-        raise HTTPException(status_code=404, detail="Partner not found")
+        raise NotFoundError(entity="Partner")
     return account
 
 
@@ -91,18 +91,15 @@ def _clean_account_data(data: dict) -> dict:
     out["code"] = (out.get("code") or "").strip().upper()
     out["name"] = (out.get("name") or "").strip()
     if not CODE_RE.match(out["code"]):
-        raise HTTPException(
-            status_code=400,
-            detail="Partner code must be 3-20 characters: A-Z, 0-9 and dashes.",
-        )
+        raise ValidationError("Partner code must be 3-20 characters: A-Z, 0-9 and dashes.")
     if not out["name"]:
-        raise HTTPException(status_code=400, detail="Partner name is required")
+        raise ValidationError("Partner name is required")
     if not (out.get("phone") or "").strip():
-        raise HTTPException(status_code=400, detail="A contact phone is required")
+        raise ValidationError("A contact phone is required")
 
     cutoff = (out.get("order_cutoff") or "18:00").strip()
     if not CUTOFF_RE.match(cutoff):
-        raise HTTPException(status_code=400, detail="Order cut-off must be HH:MM (24-hour)")
+        raise ValidationError("Order cut-off must be HH:MM (24-hour)")
     out["order_cutoff"] = cutoff
 
     days = out.get("dispatch_days") or ""
@@ -124,13 +121,13 @@ def _clean_account_data(data: dict) -> dict:
             try:
                 out[key] = cast(value)
             except (TypeError, ValueError) as exc:
-                raise HTTPException(status_code=400, detail=f"Invalid {key}") from exc
+                raise ValidationError(f"Invalid {key}") from exc
 
     if out.get("kind"):
         try:
             out["kind"] = AccountKind(out["kind"])
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail="Invalid partner kind") from exc
+            raise ValidationError("Invalid partner kind") from exc
 
     mode = (out.get("production_mode") or "SHARED").upper()
     out["production_mode"] = "DEDICATED" if mode == "DEDICATED" else "SHARED"
@@ -186,10 +183,7 @@ def create_account(db: Session, data: dict) -> B2bAccount:
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Partner code '{payload['code']}' is already in use",
-        ) from exc
+        raise ConflictError(f"Partner code '{payload['code']}' is already in use", code=payload['code']) from exc
 
     log_action(
         db,
@@ -240,7 +234,7 @@ def update_account(db: Session, account_id: int, data: dict) -> B2bAccount:
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Partner code already in use") from exc
+        raise ConflictError("Partner code already in use") from exc
 
     log_action(
         db,
@@ -307,12 +301,12 @@ def create_contract(db: Session, account_id: int, data: dict) -> B2bContract:
 
     label = (data.get("label") or "").strip()
     if not label:
-        raise HTTPException(status_code=400, detail="Contract label is required")
+        raise ValidationError("Contract label is required")
 
     try:
         effective_from = date.fromisoformat((data.get("effective_from") or "").strip())
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Valid 'effective from' date required") from exc
+        raise ValidationError("Valid 'effective from' date required") from exc
 
     effective_to_raw = (data.get("effective_to") or "").strip()
     effective_to = None
@@ -320,28 +314,27 @@ def create_contract(db: Session, account_id: int, data: dict) -> B2bContract:
         try:
             effective_to = date.fromisoformat(effective_to_raw)
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail="Invalid 'effective to' date") from exc
+            raise ValidationError("Invalid 'effective to' date") from exc
         if effective_to < effective_from:
-            raise HTTPException(
-                status_code=400, detail="'Effective to' cannot be before 'effective from'"
+            raise ValidationError(
+                "'Effective to' cannot be before 'effective from'",
+                effective_from=str(effective_from),
+                effective_to=str(effective_to),
             )
 
     try:
         mode = PricingMode((data.get("pricing_mode") or "UNIT_PRICE").upper())
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid pricing mode") from exc
+        raise ValidationError("Invalid pricing mode") from exc
 
     pct = data.get("default_commission_pct")
     default_pct = None
     if pct not in (None, ""):
         default_pct = Decimal(str(pct))
         if not (Decimal("0") <= default_pct <= Decimal("100")):
-            raise HTTPException(status_code=400, detail="Commission must be between 0 and 100")
+            raise ValidationError("Commission must be between 0 and 100")
     if mode == PricingMode.COMMISSION and default_pct is None:
-        raise HTTPException(
-            status_code=400,
-            detail="A commission contract needs a default commission percentage",
-        )
+        raise ValidationError("A commission contract needs a default commission percentage")
 
     def _opt_dec(key):
         value = data.get(key)
@@ -387,7 +380,7 @@ def create_contract(db: Session, account_id: int, data: dict) -> B2bContract:
 def get_price_item(db: Session, account_id: int, item_id: int) -> B2bPriceItem:
     item = db.get(B2bPriceItem, item_id)
     if not item or item.contract.account_id != account_id:
-        raise HTTPException(status_code=404, detail="Price item not found")
+        raise NotFoundError(entity="Price item")
     return item
 
 
@@ -399,7 +392,7 @@ def upsert_price_item(db: Session, account_id: int, data: dict) -> B2bPriceItem:
     if contract_id:
         contract = db.get(B2bContract, int(contract_id))
         if not contract or contract.account_id != account.id:
-            raise HTTPException(status_code=400, detail="Invalid contract for this partner")
+            raise ValidationError("Invalid contract for this partner")
     else:
         contract = active_contract(db, account.id, business_now().date())
         if contract is None:
@@ -417,7 +410,7 @@ def upsert_price_item(db: Session, account_id: int, data: dict) -> B2bPriceItem:
         product_id = int(data.get("product_id"))
         min_qty = max(1, int(data.get("min_qty") or 1))
     except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="Product and quantity are required") from exc
+        raise ValidationError("Product and quantity are required") from exc
 
     unit_price = data.get("unit_price")
     commission = data.get("commission_pct")
@@ -427,13 +420,11 @@ def upsert_price_item(db: Session, account_id: int, data: dict) -> B2bPriceItem:
     gst_rate = None if gst_rate in (None, "") else Decimal(str(gst_rate))
 
     if unit_price is None and commission is None:
-        raise HTTPException(
-            status_code=400, detail="Give either a unit price or a commission percentage"
-        )
+        raise ValidationError("Give either a unit price or a commission percentage")
     if unit_price is not None and unit_price < 0:
-        raise HTTPException(status_code=400, detail="Price cannot be negative")
+        raise ValidationError("Price cannot be negative")
     if commission is not None and not (Decimal("0") <= commission <= Decimal("100")):
-        raise HTTPException(status_code=400, detail="Commission must be between 0 and 100")
+        raise ValidationError("Commission must be between 0 and 100")
 
     existing = db.execute(
         select(B2bPriceItem).where(
@@ -684,12 +675,13 @@ def evaluate_order(
     for row in items:
         product = db.get(Product, int(row["product_id"]))
         if not product or not product.is_active:
-            raise HTTPException(
-                status_code=400, detail=f"Invalid or inactive product: {row.get('product_id')}"
+            raise ValidationError(
+                f"Invalid or inactive product: {row.get('product_id')}",
+                product_id=row.get("product_id"),
             )
         qty = int(row.get("quantity") or 0)
         if qty <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be positive")
+            raise ValidationError("Quantity must be positive")
 
         resolved = resolve_price(db, account, product, qty, on_date)
         unit_price = resolved["unit_price"]

@@ -1,8 +1,8 @@
 """Tests for order editing — CONFIRMED-only guard, total floor, audit."""
 
 import pytest
-from fastapi import HTTPException
 
+from app.domain import DomainError
 from app.models import AuditLog, OrderStatus
 from app.services.order_service import create_order, update_order
 from app.utils.money import money
@@ -66,7 +66,7 @@ def test_edit_rejected_when_not_confirmed(db, customer, product):
 
     update_status(db, o.id, "IN_PROGRESS")
 
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         update_order(
             db,
             o.id,
@@ -75,8 +75,8 @@ def test_edit_rejected_when_not_confirmed(db, customer, product):
                 "items": [{"product_id": product.id, "quantity": 1}],
             },
         )
-    assert ei.value.status_code == 400
-    assert "CONFIRMED" in ei.value.detail
+    assert ei.value
+    assert "CONFIRMED" in ei.value.message
 
 
 def test_edit_rejected_when_reducing_below_paid(db, customer, product):
@@ -85,7 +85,7 @@ def test_edit_rejected_when_reducing_below_paid(db, customer, product):
     # Total: 2 x 99.99 + 5% GST = ~210; advance 200; balance ~10
 
     # Try to reduce to 1 unit (~105 total), below the 200 already paid
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         update_order(
             db,
             o.id,
@@ -94,8 +94,8 @@ def test_edit_rejected_when_reducing_below_paid(db, customer, product):
                 "items": [{"product_id": product.id, "quantity": 1}],
             },
         )
-    assert ei.value.status_code == 400
-    assert "below" in ei.value.detail.lower()
+    assert ei.value
+    assert "below" in ei.value.message.lower()
 
 
 def test_edit_writes_audit_entry(db, customer, product):
@@ -128,7 +128,7 @@ def test_edit_writes_audit_entry(db, customer, product):
 
 def test_edit_requires_fulfillment_date(db, customer, product):
     o = _mk_order(db, customer, product)
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         update_order(
             db,
             o.id,
@@ -137,13 +137,13 @@ def test_edit_requires_fulfillment_date(db, customer, product):
                 "items": [{"product_id": product.id, "quantity": 1}],
             },
         )
-    assert ei.value.status_code == 400
-    assert "Fulfillment" in ei.value.detail
+    assert ei.value
+    assert "Fulfillment" in ei.value.message
 
 
 def test_edit_requires_items(db, customer, product):
     o = _mk_order(db, customer, product)
-    with pytest.raises(HTTPException) as ei:
+    with pytest.raises(DomainError) as ei:
         update_order(
             db,
             o.id,
@@ -152,4 +152,4 @@ def test_edit_requires_items(db, customer, product):
                 "items": [],
             },
         )
-    assert ei.value.status_code == 400
+    assert ei.value

@@ -9,8 +9,8 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from fastapi import HTTPException
 
+from app.domain import DomainError
 from app.models import AccountKind, Order, OrderStatus, PricingMode
 from app.services import b2b_service, invoice_service, order_service
 from app.utils.time import business_now
@@ -75,14 +75,14 @@ def test_account_code_is_normalised_and_validated(db):
     account = _account(db, code=" shop-b ")
     assert account.code == "SHOP-B"
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(DomainError) as exc:
         _account(db, code="no spaces allowed", phone="9811100009")
-    assert exc.value.status_code == 400
+    assert exc.value
 
 
 def test_duplicate_account_code_rejected(db):
     _account(db, code="DUP-1", phone="9811100002")
-    with pytest.raises(HTTPException):
+    with pytest.raises(DomainError):
         _account(db, code="DUP-1", name="Other Shop", phone="9811100003")
 
 
@@ -181,7 +181,7 @@ def test_per_product_commission_overrides_the_contract_default(db, product):
 
 def test_commission_contract_needs_a_default(db):
     account = _account(db, code="COMM-3")
-    with pytest.raises(HTTPException):
+    with pytest.raises(DomainError):
         _contract(db, account, pricing_mode="COMMISSION")
 
 
@@ -203,7 +203,7 @@ def test_expired_contract_falls_back_to_retail(db, product):
 def test_price_item_needs_a_price_or_a_commission(db):
     account = _account(db, code="EMPTY-1")
     contract = _contract(db, account)
-    with pytest.raises(HTTPException):
+    with pytest.raises(DomainError):
         b2b_service.upsert_price_item(
             db, account.id, {"contract_id": contract.id, "product_id": 1, "min_qty": 1}
         )
@@ -307,7 +307,7 @@ def test_cancelled_order_leaves_outstanding(db, product):
 def test_inactive_account_cannot_take_an_order(db, product):
     account = _account(db, code="DEAD-1")
     b2b_service.deactivate_account(db, account.id)
-    with pytest.raises(HTTPException):
+    with pytest.raises(DomainError):
         _b2b_order(db, account, product)
 
 

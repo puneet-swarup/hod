@@ -2,6 +2,7 @@
 
 from app.services import (
     audit_service,
+    costing_service,
     customer_service,
     export_service,
     invoice_service,
@@ -12,6 +13,7 @@ from app.services import (
 
 __all__ = [
     "audit_service",
+    "costing_service",
     "customer_service",
     "export_service",
     "invoice_service",

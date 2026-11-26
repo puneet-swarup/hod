@@ -16,11 +16,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domain import ConflictError, NotFoundError, ValidationError
 from app.models import Ingredient, Product, ProductIngredient
 from app.services import inventory_service
 from app.services.audit_service import log_action
@@ -166,24 +166,21 @@ def upsert_recipe_line(
     """
     product = db.get(Product, product_id)
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise NotFoundError(entity="Product")
 
     ing = db.get(Ingredient, ingredient_id)
     if not ing:
-        raise HTTPException(status_code=404, detail="Ingredient not found")
+        raise NotFoundError(entity="Ingredient")
     if not ing.is_active:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ingredient '{ing.name}' is inactive",
-        )
+        raise ValidationError(f"Ingredient '{ing.name}' is inactive", ingredient=ing.name)
 
     try:
         qty = Decimal(str(quantity_per_unit))
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid quantity") from exc
+        raise ValidationError("Invalid quantity") from exc
 
     if qty <= 0:
-        raise HTTPException(status_code=400, detail="Quantity must be positive")
+        raise ValidationError("Quantity must be positive")
 
     # Convert to the ingredient's own unit if the caller provided a
     # different but compatible one.
@@ -224,10 +221,7 @@ def upsert_recipe_line(
             db.flush()
         except IntegrityError as exc:
             db.rollback()
-            raise HTTPException(
-                status_code=400,
-                detail="This ingredient is already part of the recipe",
-            ) from exc
+            raise ConflictError("This ingredient is already part of the recipe") from exc
         log_action(
             db,
             entity_type="RecipeLine",
@@ -248,7 +242,7 @@ def upsert_recipe_line(
 def remove_recipe_line(db: Session, line_id: int) -> None:
     line = db.get(ProductIngredient, line_id)
     if not line:
-        raise HTTPException(status_code=404, detail="Recipe line not found")
+        raise NotFoundError(entity="Recipe line")
 
     log_action(
         db,
@@ -278,32 +272,26 @@ def replace_recipe(
     """
     product = db.get(Product, product_id)
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise NotFoundError(entity="Product")
 
     seen: set[int] = set()
     normalized: list[dict] = []
     for raw in lines:
         iid = int(raw["ingredient_id"])
         if iid in seen:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Ingredient {iid} listed twice in the recipe",
-            )
+            raise ValidationError(f"Ingredient {iid} listed twice in the recipe", ingredient_id=iid)
         seen.add(iid)
 
         ing = db.get(Ingredient, iid)
         if not ing or not ing.is_active:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Ingredient {iid} not found or inactive",
-            )
+            raise ValidationError(f"Ingredient {iid} not found or inactive", ingredient_id=iid)
 
         try:
             qty = Decimal(str(raw["quantity_per_unit"]))
         except Exception as exc:
-            raise HTTPException(status_code=400, detail="Invalid quantity") from exc
+            raise ValidationError("Invalid quantity") from exc
         if qty <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be positive")
+            raise ValidationError("Quantity must be positive")
 
         from_unit = (raw.get("unit") or "").strip() or None
         stored_qty = (

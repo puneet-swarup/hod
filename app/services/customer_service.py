@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.domain import ConflictError, NotFoundError
 from app.models import Address, Customer
 from app.services.audit_service import log_action
 
@@ -17,7 +17,7 @@ PAGE_SIZE_MAX = 100
 def get_customer(db: Session, customer_id: int) -> Customer:
     customer = db.get(Customer, customer_id)
     if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
+        raise NotFoundError(entity="Customer")
     return customer
 
 
@@ -91,9 +91,9 @@ def create_customer(db: Session, data: dict) -> Customer:
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Phone '{data.get('phone')}' is already registered to an active customer",
+        raise ConflictError(
+            f"Phone '{data.get('phone')}' is already registered to an active customer",
+            phone=data.get("phone"),
         ) from exc
 
     log_action(
@@ -120,9 +120,9 @@ def update_customer(db: Session, customer_id: int, data: dict) -> Customer:
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Phone '{data.get('phone')}' is already registered to an active customer",
+        raise ConflictError(
+            f"Phone '{data.get('phone')}' is already registered to an active customer",
+            phone=data.get("phone"),
         ) from exc
 
     log_action(
@@ -206,7 +206,7 @@ def set_default_address(db: Session, customer_id: int, address_id: int) -> Addre
             target = a
             break
     if not target:
-        raise HTTPException(status_code=404, detail="Address not found")
+        raise NotFoundError(entity="Address")
 
     for a in customer.addresses:
         a.is_default = a.id == address_id

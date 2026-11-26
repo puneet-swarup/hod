@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Product
 from app.services import (
+    costing_service,
     inventory_service,
     product_service,
     ready_stock_service,
@@ -42,7 +43,12 @@ def list_products_page(request: Request, db: Session = Depends(get_db)):
     # SKUs — the per-product loop is fine. If it ever matters, batch it.
     economics: dict[int, dict] = {}
     for p in products:
-        cost = recipe_service.recipe_cost(db, p.id)
+        # Cost from the costing service: material, packaging, labour,
+        # overhead and wastage — not ingredients alone. Returns None when
+        # the family has no recipe, which is shown as "not costed" rather
+        # than as a 100% margin.
+        breakdown = costing_service.cost_for(db, p)
+        cost = breakdown.total if breakdown else Decimal("0.00")
         price = p.base_price or Decimal("0.00")
         margin = price - cost
         pct = (margin / price * 100).quantize(Decimal("0.01")) if price > 0 else Decimal("0.00")
@@ -51,7 +57,10 @@ def list_products_page(request: Request, db: Session = Depends(get_db)):
             "unit_price": price,
             "unit_margin": margin,
             "margin_pct": pct,
-            "has_recipe": cost > 0,
+            # "costed" is not the same as "has a recipe": a family with a
+            # recipe but no priced ingredients still costs nothing.
+            "has_recipe": breakdown is not None,
+            "costed": breakdown is not None and cost > 0,
         }
 
     return templates.TemplateResponse(
