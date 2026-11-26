@@ -47,14 +47,31 @@
             display: block;
         }
         .nav-more-menu a {
-            display: block;
+            /* A flex row, not a block: every item then aligns on the same
+               column whatever emoji or label width it happens to have.
+               A block here left-aligned by accident and drifted as soon as
+               one item carried different markup. */
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
             padding: 0.5rem 0.85rem;
             border-radius: 0.35rem;
             font-size: 0.875rem;
             color: #1f2937;
             text-decoration: none;
             white-space: nowrap;
+            text-align: left;
+            line-height: 1.2;
             transition: background-color 0.15s ease;
+        }
+        /* Defensive: a stray button class inside the menu would otherwise
+           centre itself and break the column, which is exactly what
+           happened once. */
+        .nav-more-menu a.btn {
+            display: flex;
+            justify-content: flex-start;
+            min-height: 0;
+            height: auto;
         }
         .nav-more-menu a:hover {
             background: #fef3c7;
@@ -106,6 +123,10 @@
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/products' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
                     🎂 <span class="hidden sm:inline">Products</span>
                 </a>
+                <a href="/costing"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/costing' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    💰 <span class="hidden sm:inline">Costing</span>
+                </a>
 
                 <details class="nav-more" id="nav-more">
                     <summary class="btn btn-sm btn-ghost font-semibold whitespace-nowrap">
@@ -113,11 +134,8 @@
                     </summary>
                     <div class="nav-more-menu">
                         <a href="/b2b" class="{% if '/b2b' in request.url.path %}active{% endif %}">🏪 Partners</a>
-                        <a href="/stock"
-                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/stock' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
-                    🧺 <span class="hidden sm:inline">Ready stock</span>
-                </a>
-                <a href="/ingredients" class="{% if '/ingredients' in request.url.path %}active{% endif %}">📦 Inventory</a>
+                        <a href="/stock" class="{% if '/stock' in request.url.path %}active{% endif %}">🧺 Ready stock</a>
+                        <a href="/ingredients" class="{% if '/ingredients' in request.url.path %}active{% endif %}">📦 Inventory</a>
                         <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}">📊 Reports</a>
                         <a href="/dashboard" class="{% if '/dashboard' in request.url.path %}active{% endif %}">📈 Dashboard</a>
                         <a href="/export" class="{% if '/export' in request.url.path %}active{% endif %}">📥 Export</a>

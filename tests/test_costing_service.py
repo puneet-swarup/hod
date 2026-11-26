@@ -505,3 +505,35 @@ def test_the_yield_defaults_when_it_is_left_off(client, db):
         follow_redirects=False,
     )
     assert cs.recipe_for(db, "ginger cookie").yield_pieces == 24
+
+
+# ---------------------------------------------------------------------------
+# Discoverability — a screen nobody can reach is not a feature
+# ---------------------------------------------------------------------------
+
+
+def test_the_navigation_links_to_costing(client, db):
+    """The module shipped with screens and no way in. This keeps the door open."""
+    body = client.get("/today").text
+    assert 'href="/costing"' in body
+
+
+def test_the_navigation_links_to_ready_stock(client, db):
+    body = client.get("/today").text
+    assert 'href="/stock"' in body
+
+
+def test_no_button_class_inside_the_more_menu():
+    """The menu is a list of plain links; a .btn inside it centres itself and
+    breaks the column, which is exactly how the Ready-stock entry drifted out
+    of alignment."""
+    import pathlib
+    import re
+
+    html = pathlib.Path("app/templates/base.html").read_text(encoding="utf-8")
+    menu = re.search(r'<div class="nav-more-menu">(.*?)</div>', html, re.S)
+    assert menu, "the More menu should still exist"
+    assert "btn " not in menu.group(1), (
+        "Use a plain <a> inside .nav-more-menu — a button class breaks the "
+        "alignment column"
+    )
