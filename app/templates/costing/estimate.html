@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Estimate a product — costing{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-start flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">Estimate a product</h1>
+            <p class="text-sm text-base-content/60">
+                Work out what something would cost and what to charge — before you commit to selling it.
+            </p>
+        </div>
+        <a href="/costing/" class="btn btn-ghost btn-sm">← Costing</a>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error text-sm"><span>{{ error }}</span></div>
+    {% endif %}
+
+    <form method="post" action="/costing/estimate" class="space-y-4">
+
+        <!-- What goes in -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4 space-y-3">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">The batch</h2>
+                <p class="text-xs text-base-content/60">
+                    Quantities are for the whole batch, in each ingredient's own unit.
+                </p>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="form-control">
+                        <span class="label-text text-xs">Batch yields (pieces)</span>
+                        <input type="number" name="yield_pieces" min="1"
+                               value="{{ form.yield_pieces if form else 24 }}"
+                               class="input input-bordered input-sm w-full" />
+                    </label>
+                    <label class="form-control">
+                        <span class="label-text text-xs">Pieces in the item you're pricing</span>
+                        <input type="number" name="pieces" min="1"
+                               value="{{ form.pieces if form else 1 }}"
+                               class="input input-bordered input-sm w-full" />
+                    </label>
+                    <label class="form-control">
+                        <span class="label-text text-xs">Labour for the batch (minutes)</span>
+                        <input type="number" name="labour_minutes" min="0"
+                               value="{{ form.labour_minutes if form else 90 }}"
+                               class="input input-bordered input-sm w-full" />
+                    </label>
+                    <label class="form-control">
+                        <span class="label-text text-xs">Overhead per batch (₹)</span>
+                        <input type="number" step="0.01" name="overhead_per_batch" min="0"
+                               value="{{ form.overhead_per_batch if form else 120 }}"
+                               class="input input-bordered input-sm w-full" />
+                    </label>
+                    <label class="form-control">
+                        <span class="label-text text-xs">Wastage (%)</span>
+                        <input type="number" step="0.01" name="wastage_pct" min="0" max="99"
+                               value="{{ form.wastage_pct if form else costing.default_wastage_pct }}"
+                               class="input input-bordered input-sm w-full" />
+                    </label>
+                    <label class="form-control">
+                        <span class="label-text text-xs">Packaging for this item (₹)</span>
+                        <input type="number" step="0.01" name="packaging_cost" min="0"
+                               value="{{ form.packaging_cost if form else 0 }}"
+                               class="input input-bordered input-sm w-full" />
+                    </label>
+                </div>
+
+                <div class="space-y-2 pt-1">
+                    <p class="text-xs font-semibold text-base-content/60">Ingredients</p>
+                    {% for row in rows %}
+                    <div class="flex gap-2 items-center">
+                        <select name="ingredient_id" class="select select-bordered select-sm flex-1 min-w-0">
+                            <option value="">—</option>
+                            {% for ing in ingredients %}
+                            <option value="{{ ing.id }}"
+                                {% if row.ingredient_id and row.ingredient_id|string == ing.id|string %}selected{% endif %}>
+                                {{ ing.name }} ({{ ing.unit }} · {{ ing.cost_per_unit|money }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <input type="number" step="0.001" name="quantity" min="0"
+                               value="{{ row.quantity if row.quantity else '' }}"
+                               placeholder="qty" class="input input-bordered input-sm w-24 shrink-0" />
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-amber font-semibold w-full">Estimate the cost</button>
+    </form>
+
+    {% if breakdown %}
+    <!-- The answer -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-1">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase mb-1">What it would cost</h2>
+            {% for label, value in [('Material', breakdown.material), ('Packaging', breakdown.packaging),
+                                    ('Labour', breakdown.labour), ('Overhead', breakdown.overhead),
+                                    ('Wastage', breakdown.wastage)] %}
+            <div class="flex justify-between text-sm">
+                <span class="text-base-content/70">{{ label }}</span>
+                <span class="font-mono">{{ value|money }}</span>
+            </div>
+            {% endfor %}
+            <div class="flex justify-between font-bold pt-2 border-t border-base-200">
+                <span>Total cost</span>
+                <span class="font-mono">{{ breakdown.total|money }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-2">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">What to charge</h2>
+            {% for s in suggestions %}
+            <div class="flex justify-between text-sm py-1 border-b border-base-200 last:border-0">
+                <span class="text-base-content/70">{{ s.label }}</span>
+                <span class="font-mono font-semibold">
+                    {{ s.price|money }}
+                    <span class="text-xs font-normal text-base-content/50">
+                        ({{ s.margin_pct }}% margin)
+                    </span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Commit -->
+    <form method="post" action="/costing/estimate/create" class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-3">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Keep it</h2>
+            <p class="text-xs text-base-content/60">
+                Creates the product, saves this as its recipe, and sets the price.
+                Nothing is saved until you press this.
+            </p>
+
+            {% for key in ['yield_pieces', 'pieces', 'labour_minutes', 'overhead_per_batch',
+                           'wastage_pct', 'packaging_cost'] %}
+            <input type="hidden" name="{{ key }}" value="{{ form.get(key) if form else '' }}" />
+            {% endfor %}
+
+            <div class="space-y-2">
+                {% for row in rows %}
+                <input type="hidden" name="ingredient_id" value="{{ row.ingredient_id }}" />
+                <input type="hidden" name="quantity" value="{{ row.quantity }}" />
+                {% endfor %}
+            </div>
+
+            <label class="form-control">
+                <span class="label-text text-xs font-semibold">Product name</span>
+                <input type="text" name="name" required
+                       class="input input-bordered w-full" placeholder="e.g., Pistachio Brownie" />
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+                <label class="form-control">
+                    <span class="label-text text-xs font-semibold">Category</span>
+                    <input type="text" name="category" value="Cake"
+                           class="input input-bordered input-sm w-full" />
+                </label>
+                <label class="form-control">
+                    <span class="label-text text-xs font-semibold">Selling price (₹)</span>
+                    <input type="number" step="0.01" name="price" required
+                           value="{{ suggestions[0].price }}"
+                           class="input input-bordered input-sm w-full" />
+                </label>
+            </div>
+            <label class="form-control">
+                <span class="label-text text-xs font-semibold">GST rate (%)</span>
+                <input type="number" step="0.01" name="gst_rate" min="0" max="28" value="0"
+                       class="input input-bordered input-sm w-full" />
+            </label>
+
+            <button type="submit" class="btn btn-amber font-semibold">Create the product</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

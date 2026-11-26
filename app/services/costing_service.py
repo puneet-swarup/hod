@@ -264,6 +264,68 @@ def set_packaging(db: Session, product_id: int, name: str, cost: Decimal | str) 
 # ---------------------------------------------------------------------------
 
 
+def estimate(
+    db: Session,
+    *,
+    rows: list[dict],
+    pieces: int = 1,
+    yield_pieces: int = 24,
+    labour_minutes: int = 0,
+    overhead_per_batch: Decimal | str = 0,
+    wastage_pct: Decimal | str | None = None,
+    packaging_cost: Decimal | str = 0,
+) -> CostBreakdown:
+    """Cost something that does not exist yet.
+
+    A new product is costed before it is created: you want to know what it
+    costs and what to charge before you decide to sell it. So this takes the
+    ingredient rows straight from a form rather than from a stored recipe.
+
+    Same arithmetic as ``cost_for`` — literally the same function — because
+    an estimate that used different maths would be worse than no estimate.
+    """
+    settings = get_settings(db)
+    wastage = settings.default_wastage_pct if wastage_pct is None else Decimal(str(wastage_pct))
+
+    material = []
+    for row in rows:
+        ingredient = db.get(Ingredient, int(row["ingredient_id"]))
+        if ingredient is None or not ingredient.is_active:
+            raise ValidationError(
+                f"Ingredient {row['ingredient_id']} not found or inactive",
+                ingredient_id=row["ingredient_id"],
+            )
+        quantity = Decimal(str(row["quantity"]))
+        if quantity <= 0:
+            raise ValidationError(
+                "A line needs a positive quantity", ingredient_id=ingredient.id
+            )
+        material.append(
+            CostLine(
+                label=f"{ingredient.name} {quantity:g} {ingredient.unit}",
+                quantity=quantity,
+                unit_cost=ingredient.cost_per_unit or Decimal("0"),
+            )
+        )
+
+    packaging = (
+        [CostLine(label="Packaging", quantity=Decimal(1), unit_cost=Decimal(str(packaging_cost)))]
+        if Decimal(str(packaging_cost or 0)) > 0
+        else []
+    )
+
+    return calculate(
+        material=material,
+        packaging=packaging,
+        pieces=pieces,
+        yield_pieces=yield_pieces,
+        labour_minutes=labour_minutes,
+        labour_rate_per_hour=settings.labour_rate_per_hour,
+        overhead_per_batch=overhead_per_batch,
+        wastage_pct=wastage,
+    )
+
+
 def cost_for(db: Session, product: Product) -> CostBreakdown | None:
     """The cost of one sellable size, or None when the family has no recipe.
 
@@ -403,6 +465,7 @@ __all__ = [
     "delete_recipe",
     "packaging_for",
     "set_packaging",
+    "estimate",
     "cost_for",
     "cost_sheet",
     "suggest_prices",

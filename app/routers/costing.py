@@ -5,11 +5,14 @@ The router renders and delegates. Every calculation happens in
 so this file contains no maths at all.
 """
 
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.domain import ValidationError, pricing
 from app.services import costing_service, product_service
 
 router = APIRouter()
@@ -260,6 +263,150 @@ async def import_recipes(request: Request, db: Session = Depends(get_db)):
             status_code=400,
         )
     return RedirectResponse(url=f"/costing/import?recipes={created}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Estimate — cost something that does not exist yet
+# ---------------------------------------------------------------------------
+
+
+def _rows_from_form(form) -> list[dict]:
+    """Ingredient rows from a form, dropping the blanks."""
+    ids = form.getlist("ingredient_id")
+    quantities = form.getlist("quantity")
+    return [
+        {"ingredient_id": iid, "quantity": qty}
+        for iid, qty in zip(ids, quantities, strict=False)
+        if str(iid).strip() and str(qty).strip()
+    ]
+
+
+@router.get("/estimate", response_class=HTMLResponse)
+def estimate_page(request: Request, db: Session = Depends(get_db)):
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        request=request,
+        name="costing/estimate.html",
+        context={
+            "settings": request.app.state.settings,
+            "ingredients": _ingredients(db),
+            "costing": costing_service.get_settings(db),
+            "rows": [{} for _ in range(8)],
+        },
+    )
+
+
+@router.post("/estimate", response_class=HTMLResponse)
+async def estimate(request: Request, db: Session = Depends(get_db)):
+    """Cost a product idea. Nothing is saved — this is the calculator."""
+    templates = request.app.state.templates
+    form = await request.form()
+    rows = _rows_from_form(form)
+
+    context = {
+        "settings": request.app.state.settings,
+        "ingredients": _ingredients(db),
+        "costing": costing_service.get_settings(db),
+        "rows": rows or [{}],
+        "form": dict(form),
+    }
+
+    try:
+        breakdown = costing_service.estimate(
+            db,
+            rows=rows,
+            pieces=int(form.get("pieces") or 1),
+            yield_pieces=int(form.get("yield_pieces") or 24),
+            labour_minutes=int(form.get("labour_minutes") or 0),
+            overhead_per_batch=form.get("overhead_per_batch") or 0,
+            wastage_pct=form.get("wastage_pct"),
+            packaging_cost=form.get("packaging_cost") or 0,
+        )
+    except ValidationError as exc:
+        context["error"] = exc.message
+        return templates.TemplateResponse(
+            request=request, name="costing/estimate.html", context=context, status_code=400
+        )
+
+    settings_row = costing_service.get_settings(db)
+    gst = Decimal(str(form.get("gst_rate") or 0))
+
+    context.update(
+        {
+            "breakdown": breakdown,
+            "suggestions": [
+                pricing.by_margin(
+                    breakdown,
+                    settings_row.target_margin_pct,
+                    rounding=settings_row.price_rounding,
+                    gst_rate=gst,
+                ),
+                pricing.by_markup(
+                    breakdown, Decimal("50"), rounding=settings_row.price_rounding, gst_rate=gst
+                ),
+                pricing.by_margin(
+                    breakdown,
+                    Decimal("60"),
+                    rounding=settings_row.price_rounding,
+                    gst_rate=gst,
+                ),
+            ],
+            "gst_rate": gst,
+        }
+    )
+    return templates.TemplateResponse(
+        request=request, name="costing/estimate.html", context=context
+    )
+
+
+@router.post("/estimate/create", response_class=HTMLResponse)
+async def create_from_estimate(request: Request, db: Session = Depends(get_db)):
+    """Turn an estimate into a real product, recipe and price.
+
+    The estimate is the decision; this is the commitment. It creates the
+    product at the price that was agreed, saves the recipe under its family,
+    and records the packaging cost — so what was calculated is what is stored.
+    """
+    form = await request.form()
+    name = str(form.get("name") or "").strip()
+    if not name:
+        raise ValidationError("A product needs a name")
+
+    price = Decimal(str(form.get("price") or 0))
+    if price <= 0:
+        raise ValidationError("A product needs a selling price")
+
+    product = product_service.create_product(
+        db,
+        {
+            "name": name,
+            "category": str(form.get("category") or "Cake"),
+            "base_price": price,
+            "gst_rate": Decimal(str(form.get("gst_rate") or 0)),
+            "pack_size": int(form.get("pieces") or 1),
+            "pack_label": "",
+            "prep_time_hours": 4,
+            "is_active": True,
+        },
+    )
+
+    costing_service.save_recipe(
+        db,
+        family_key=product.family_key,
+        name=name,
+        yield_pieces=int(form.get("yield_pieces") or 24),
+        labour_minutes=int(form.get("labour_minutes") or 0),
+        overhead_per_batch=form.get("overhead_per_batch") or 0,
+        wastage_pct=form.get("wastage_pct") or 0,
+        lines=_rows_from_form(form),
+    )
+
+    packaging_cost = Decimal(str(form.get("packaging_cost") or 0))
+    if packaging_cost > 0:
+        costing_service.set_packaging(db, product.id, "Packaging", packaging_cost)
+
+    db.commit()
+    return RedirectResponse(url=f"/costing/{product.id}?saved=created", status_code=303)
 
 
 @router.get("/settings", response_class=HTMLResponse)

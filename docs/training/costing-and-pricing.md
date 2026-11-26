@@ -20,6 +20,23 @@ to check when a number looks wrong.
 
 ---
 
+## Pricing something you haven't made yet
+
+**Costing → Estimate a new product.**
+
+This is the calculator without a product. Put in the batch — ingredients,
+yield, labour, overhead, packaging — and it tells you what one would cost
+and what to charge, **without saving anything**.
+
+Use it when someone asks "can you do a pistachio brownie?" and you need to
+know the price before you say yes. If the answer is yes, press **Create the
+product** and it becomes a real product with this recipe and this price
+already attached.
+
+Nothing is saved until you press that button.
+
+---
+
 ## Step 1 — Enter your ingredients
 
 **Costing → Bulk entry**, top box:

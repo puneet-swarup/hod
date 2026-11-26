@@ -565,3 +565,96 @@ def test_every_nav_target_is_a_real_page(client, db):
     for target in targets:
         resp = client.get(target, follow_redirects=False)
         assert resp.status_code < 400, f"{target} answered {resp.status_code}"
+
+
+# ---------------------------------------------------------------------------
+# Estimate — costing something that does not exist yet
+# ---------------------------------------------------------------------------
+
+
+def test_the_estimate_page_renders(client, db):
+    _ingredient(db, "Butter", "0.55")
+    db.commit()
+    body = client.get("/costing/estimate").text
+    assert "Estimate a product" in body
+    assert "Butter" in body
+
+
+def test_an_estimate_costs_without_creating_anything(client, db):
+    from app.models import Product, Recipe
+
+    butter = _ingredient(db, "Butter", "0.55")
+    db.commit()
+
+    resp = client.post(
+        "/costing/estimate",
+        data={
+            "yield_pieces": "24",
+            "pieces": "9",
+            "labour_minutes": "90",
+            "overhead_per_batch": "120",
+            "wastage_pct": "0",
+            "packaging_cost": "0",
+            "ingredient_id": [str(butter.id)],
+            "quantity": ["800"],
+        },
+    )
+
+    assert resp.status_code == 200
+    # 800 g × ₹0.55 = ₹440 a batch, over 24 pieces × 9 = ₹165
+    assert "165.00" in resp.text
+    # Nothing was written.
+    assert db.query(Product).count() == 0
+    assert db.query(Recipe).count() == 0
+
+
+def test_an_estimate_with_no_ingredients_is_refused(client, db):
+    resp = client.post(
+        "/costing/estimate", data={"yield_pieces": "24", "pieces": "1"}
+    )
+    # No rows means nothing to cost — the page comes back, still usable.
+    assert resp.status_code == 200
+    assert "What it would cost" in resp.text
+
+
+def test_an_estimate_can_become_a_real_product(client, db):
+    from app.models import Product
+
+    butter = _ingredient(db, "Butter", "0.55")
+    db.commit()
+
+    resp = client.post(
+        "/costing/estimate/create",
+        data={
+            "name": "Pistachio Brownie",
+            "category": "Brownie",
+            "price": "450",
+            "gst_rate": "0",
+            "yield_pieces": "24",
+            "pieces": "9",
+            "labour_minutes": "90",
+            "overhead_per_batch": "120",
+            "wastage_pct": "5",
+            "packaging_cost": "35",
+            "ingredient_id": [str(butter.id)],
+            "quantity": ["800"],
+        },
+        follow_redirects=False,
+    )
+
+    assert resp.status_code == 303
+    product = db.query(Product).filter(Product.name == "Pistachio Brownie").one()
+    assert product.base_price == D("450.00")
+    assert product.pack_size == 9
+
+    # The recipe came with it, so the sheet is costed immediately.
+    assert cs.recipe_for(db, product.family_key) is not None
+    assert cs.cost_for(db, product) is not None
+
+
+def test_creating_from_an_estimate_needs_a_name(client, db):
+    resp = client.post(
+        "/costing/estimate/create", data={"price": "450", "pieces": "1"}
+    )
+    assert resp.status_code == 400
+    assert "name" in resp.text.lower()

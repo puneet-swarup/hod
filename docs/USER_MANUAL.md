@@ -461,7 +461,19 @@ one tray of 24 brownies. Every size is costed from it automatically: the
 Both boxes are **all or nothing**: if one line is wrong, nothing is saved
 and the page tells you which line.
 
-### 8.3 Read the cost sheet
+### 8.3 Cost something that does not exist yet
+
+**Costing → Estimate a new product.**
+
+The calculator without a product: enter a batch — ingredients, yield,
+labour, overhead, packaging — and it returns the cost and three prices,
+**saving nothing**.
+
+Use it to price an idea before agreeing to it. If you decide to sell it,
+press **Create the product** and it becomes a real product with this recipe
+and this price already attached.
+
+### 8.4 Read the cost sheet
 
 **Costing →** tap a product. The sheet shows:
 
@@ -480,7 +492,7 @@ percentage, the markup, and the break-even price.
 **If a product has no recipe, the sheet says the cost is unknown — not
 zero.** A zero would read as a 100% margin, which is a lie.
 
-### 8.4 Choose a price
+### 8.5 Choose a price
 
 The sheet offers three routes, side by side:
 
@@ -499,7 +511,7 @@ rounding down to make a price tidy gives away margin on every sale.
 Nothing changes a price by itself. Pressing **Use** writes the new price and
 records it in the audit log.
 
-### 8.5 Assumptions
+### 8.6 Assumptions
 
 **Costing → Assumptions** holds the numbers used everywhere: labour rate per
 hour, default wastage, target margin, whether prices are before or after
@@ -509,7 +521,7 @@ If you are not registered for GST, the rate is zero and the sheet says so —
 including what the customer would pay at 5%, which is the price list you
 will need the day you register.
 
-### 8.6 Two different margins — do not confuse them
+### 8.7 Two different margins — do not confuse them
 
 | Margin | Means | Where |
 |---|---|---|
