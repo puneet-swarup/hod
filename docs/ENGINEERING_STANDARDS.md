@@ -148,6 +148,9 @@ A change is not finished until every line is true:
 - [ ] Design doc updated if the module's shape changed
 - [ ] `CHANGELOG.md` updated — a release that nobody can read about later
       may as well not have happened
+- [ ] Deploy script still covers everything checkable in this release. If it
+      adds a version, a required file or a config value, the script checks
+      it and `tests/test_deploy_script.py` lists it
 - [ ] User manual or training material updated if a screen changed
 - [ ] Deployed, or explicitly recorded as not deployed
 

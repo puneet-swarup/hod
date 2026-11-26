@@ -7,6 +7,7 @@
 #   ./scripts/deploy.sh --dry-run    show what would happen, change nothing
 #   ./scripts/deploy.sh --rollback   undo the last deployment
 #   ./scripts/deploy.sh --status     is everything healthy right now?
+#   ./scripts/deploy.sh --test       run the test suite first, and stop if it fails
 #
 # What it does, in order, and why:
 #
@@ -14,6 +15,10 @@
 #                    is another deploy already running
 #   2. Show        — exactly which commits are about to land, and whether the
 #                    release changes the database
+#   2b. Release    — that the release is complete: it has a dated entry in
+#                    CHANGELOG.md, and that entry is not older than the code.
+#                    A release nobody can read about later may as well not
+#                    have happened, so this is a stop, not a warning.
 #   3. Back up     — a consistent snapshot of bakery.db, verified, BEFORE
 #                    anything is touched
 #   4. Update      — git pull, pip install
@@ -27,6 +32,11 @@
 #
 # Designed to be run by someone who does not know Unix: every line of output
 # says what is happening and what to do if it goes wrong.
+#
+# THIS SCRIPT MUST GROW WITH THE APP. Every release that adds something a
+# person could check — a version, a config value, a required file — adds a
+# check here, and a test in tests/test_deploy_script.py fails if a known
+# check disappears. See the checklist in that file.
 #
 set -uo pipefail
 
@@ -63,6 +73,7 @@ MIN_FREE_MB="${HOD_MIN_FREE_MB:-300}"
 
 ASSUME_YES=0
 DRY_RUN=0
+RUN_TESTS=0
 FORCE=0
 ACTION="deploy"
 
@@ -73,6 +84,7 @@ for arg in "$@"; do
     --force)       FORCE=1 ;;
     --rollback)    ACTION="rollback" ;;
     --status)      ACTION="status" ;;
+    --test)        RUN_TESTS=1 ;;
     -h|--help)     sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown option: $arg  (try --help)"; exit 2 ;;
   esac
@@ -321,13 +333,81 @@ rollback() {
 # ---------------------------------------------------------------------------
 # Status mode — read-only health report, safe to run any time.
 # ---------------------------------------------------------------------------
+# The "· v1.5 (26 November 2026)" tail for the status line, or empty.
+release_suffix() {
+  local line v d
+  line="$( cd "$APP_DIR" && git show HEAD:CHANGELOG.md 2>/dev/null | release_line )"
+  [ -n "$line" ] || return 0
+  v="${line%%|*}"; d="${line#*|}"
+  printf '  ·  %s (%s)' "$v" "$d"
+}
+
+# --- release identity ------------------------------------------------------
+# The app has no version file: the changelog is the record, and its newest
+# entry is the version being run. Reading it from the commit that is about to
+# be deployed means the check is about the incoming release, not the current
+# one — which is the only version that matters at deploy time.
+
+# Prints "v1.5|26 November 2026" from a changelog on stdin, or nothing.
+release_line() {
+  awk '
+    /^## / {
+      line = $0
+      sub(/^##[ \t]+/, "", line)
+      n = split(line, parts, /—|–|·| - /)
+      if (n >= 2) { v = parts[1]; d = parts[2] } else { v = line; d = "" }
+      gsub(/^[ \t]+|[ \t]+$/, "", v)
+      gsub(/^[ \t]+|[ \t]+$/, "", d)
+      print v "|" d
+      exit
+    }
+  '
+}
+
+# "26 November 2026" → seconds. Returns 0 when the date is unparseable, so a
+# malformed date never silently passes a comparison.
+date_epoch() {
+  date -d "$1" +%s 2>/dev/null || echo 0
+}
+
+# The first few entries of the newest release, for the operator to read.
+# Continuation lines are joined, because a changelog entry is hand-wrapped
+# and half a sentence on the terminal is worse than none.
+release_summary() {
+  awk '
+    function flush() {
+      if (buf != "") {
+        gsub(/\*\*/, "", buf)
+        print buf
+        n++
+        buf = ""
+      }
+    }
+    /^## / { if (seen) { flush(); exit } seen = 1; next }
+    !seen { next }
+    /^### / { next }
+    /^- / {
+      flush()
+      if (n >= 4) exit
+      buf = $0
+      sub(/^- /, "", buf)
+      next
+    }
+    /^[ \t]+/ {
+      if (buf != "") { line = $0; gsub(/^[ \t]+/, "", line); buf = buf " " line }
+      next
+    }
+    END { flush() }
+  '
+}
+
 do_status() {
   hr
   printf '%s  HOUSE OF DESSERTS — status%s\n' "$BOLD" "$OFF"
   hr
   say ""
   info "service:  $SERVICE is $(service_state)"
-  info "version:  $( cd "$APP_DIR" && git rev-parse --short HEAD 2>/dev/null || echo unknown )"
+  info "version:  $( cd "$APP_DIR" && git rev-parse --short HEAD 2>/dev/null || echo unknown )$(release_suffix)"
   info "schema:   $(schema_current) (code expects $(schema_head))"
   info "data:     $(du -sh "$DATA_DIR" 2>/dev/null | cut -f1 || echo '?')"
   info "backups:  $(ls -1d "$BACKUP_DIR"/*/ 2>/dev/null | wc -l) days kept"
@@ -512,6 +592,65 @@ else
   git --no-pager log --oneline --no-decorate "HEAD..origin/$BRANCH" | sed 's/^/    /'
 fi
 
+# --- release check ----------------------------------------------------------
+# Everything here is checked against the code being DEPLOYED, read out of the
+# incoming commit, not the copy on disk.
+step "Checking the release is complete"
+
+INCOMING_CHANGELOG="$(git show "$REMOTE_SHA:CHANGELOG.md" 2>/dev/null || echo "")"
+INCOMING_RELEASE="$(printf '%s' "$INCOMING_CHANGELOG" | release_line)"
+INCOMING_COMMIT_DATE="$(git show -s --format=%cd --date=format:'%-d %B %Y' "$REMOTE_SHA")"
+
+if [ -z "$INCOMING_RELEASE" ]; then
+  die "This release has no entry in CHANGELOG.md.
+  The What's new page reads that file, so without an entry the release is
+  invisible to whoever runs the bakery. Add one, push, and deploy again."
+fi
+
+INCOMING_VERSION="${INCOMING_RELEASE%%|*}"
+INCOMING_DATE="${INCOMING_RELEASE#*|}"
+
+if [ -z "$INCOMING_DATE" ]; then
+  die "The newest CHANGELOG.md entry has no date: '$INCOMING_VERSION'.
+  Write it as '## v1.6 — 27 November 2026'."
+fi
+
+INCOMING_EPOCH="$(date_epoch "$INCOMING_DATE")"
+if [ "$INCOMING_EPOCH" -eq 0 ]; then
+  # Unreadable, not merely old. Saying 'behind the code' here would send
+  # someone looking for the wrong problem.
+  die "The newest CHANGELOG.md entry has a date the server cannot read: '$INCOMING_DATE'.
+  Write it as '## v1.6 — 27 November 2026'."
+fi
+
+# A release dated before the commit it ships in means the changelog was not
+# updated with the code. Both dates are day-resolution, so this catches a
+# forgotten entry rather than an hour's drift.
+if [ "$INCOMING_EPOCH" -lt "$(date_epoch "$INCOMING_COMMIT_DATE")" ]; then
+  die "CHANGELOG.md is behind the code.
+  The newest entry is $INCOMING_VERSION, dated $INCOMING_DATE,
+  but the commit being deployed is dated $INCOMING_COMMIT_DATE.
+  Add an entry for what changed, push, and deploy again."
+fi
+
+ok "$INCOMING_VERSION — $INCOMING_DATE"
+printf '%s\n' "$INCOMING_CHANGELOG" | release_summary | sed 's/^/      /'
+
+if [ "$RUN_TESTS" -eq 1 ]; then
+  step "Running the test suite"
+  if "$APP_DIR/.venv/bin/python" -c "import pytest" 2>/dev/null; then
+    if ( cd "$APP_DIR" && SECRET_KEY="${SECRET_KEY:-deploy-check}" DEBUG=true \
+         "$APP_DIR/.venv/bin/python" -m pytest --ignore=tests/ui -q 2>&1 | tail -5 ); then
+      ok "tests pass"
+    else
+      die "The test suite failed. Nothing was deployed.
+  Run it yourself to see why:  cd $APP_DIR && .venv/bin/python -m pytest --ignore=tests/ui"
+    fi
+  else
+    warn "pytest is not installed here — skipping (install with: pip install -e '.[dev]')"
+  fi
+fi
+
 step "Checking whether this release changes the database"
 REMOTE_MIGRATIONS="$(git diff --name-only "HEAD..origin/$BRANCH" -- alembic/versions/ | wc -l | tr -d ' ')"
 
@@ -639,9 +778,9 @@ hr
 printf '%s  ✓ DEPLOYED SUCCESSFULLY%s\n' "$BOLD$GREEN" "$OFF"
 hr
 if [ "$PREV_SHA" = "$(git rev-parse HEAD)" ]; then
-  say "  Version:  $(git rev-parse --short HEAD)   (code was already at this version)"
+  say "  Version:  $(git rev-parse --short HEAD)  $(release_suffix)   (code was already at this version)"
 else
-  say "  Version:  $(git rev-parse --short HEAD)   (was $(git rev-parse --short "$PREV_SHA"))"
+  say "  Version:  $(git rev-parse --short HEAD)  $(release_suffix)   (was $(git rev-parse --short "$PREV_SHA"))"
 fi
 say "  Backup:   $BACKUP_FILE"
 say "  Time:     ${SECONDS}s"
