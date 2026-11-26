@@ -37,7 +37,7 @@ jobs:
           SECRET_KEY: ci-secret
           DEBUG: "false"
           BUSINESS_TIMEZONE: Asia/Kolkata
-        run: pytest --ignore=tests/ui -v
+        run: pytest --ignore=tests/ui -v --cov=app --cov-report=term-missing --cov-fail-under=80
 
       - name: UI tests
         env:
