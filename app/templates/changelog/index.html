@@ -54,21 +54,22 @@
                     <li class="text-sm flex gap-2">
                         <span class="text-amber-600 shrink-0">•</span>
                         <span>
-                            {# The changelog uses two inline marks: **bold** for the
-                               headline of an entry and *italic* for a UI label.
-                               Rendering them here keeps the page readable without
-                               a markdown dependency or a |safe filter. #}
-                            {% set with_bold = item | replace('**', '§') %}
-                            {% for chunk in with_bold.split('§') %}
-                                {% if loop.index is even %}
-                                <strong>{{ chunk }}</strong>
-                                {% else %}
-                                {% set with_em = chunk | replace('*', '‡') %}
-                                {% for piece in with_em.split('‡') %}
-                                    {% if loop.index is even %}<em>{{ piece }}</em>{% else %}{{ piece }}{% endif %}
-                                {% endfor %}
-                                {% endif %}
-                            {% endfor %}
+                            {#- The changelog uses two inline marks: **bold** for the
+                                headline of an entry and *italic* for a UI label.
+                                Every tag is whitespace-trimmed: without the dashes
+                                the template's own indentation leaks out as a space
+                                before each following comma. -#}
+                            {%- set with_bold = item | replace('**', '§') -%}
+                            {%- for chunk in with_bold.split('§') -%}
+                                {%- if loop.index is even -%}
+                                    <strong>{{ chunk }}</strong>
+                                {%- else -%}
+                                    {%- set with_em = chunk | replace('*', '‡') -%}
+                                    {%- for piece in with_em.split('‡') -%}
+                                        {%- if loop.index is even -%}<em>{{ piece }}</em>{%- else -%}{{ piece }}{%- endif -%}
+                                    {%- endfor -%}
+                                {%- endif -%}
+                            {%- endfor -%}
                         </span>
                     </li>
                     {% endfor %}

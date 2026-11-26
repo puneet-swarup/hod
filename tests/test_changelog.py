@@ -247,3 +247,25 @@ def test_the_changelog_avoids_engineering_language():
                     assert not re.search(rf"\b{re.escape(word)}\b", item, re.I), (
                         f"v{release.version} uses '{word}': {item[:70]}"
                     )
+
+
+def test_no_stray_whitespace_around_punctuation(client, db):
+    """Template indentation must not leak into the rendered text.
+
+    The bold/italic rendering is built from template tags; without whitespace
+    trimming their indentation appeared as 'margin , not just' — visible on
+    the page, invisible to every test that only checked for content.
+    """
+    import re
+
+    body = client.get("/whats-new").text
+    # Only the entries — the page also carries a <style> block whose CSS
+    # comments legitimately contain "answer. */" with a space.
+    entries = re.findall(r"<li class=\"text-sm flex gap-2\">(.*?)</li>", body, re.S)
+    assert entries, "the page should render entries"
+
+    for entry in entries:
+        assert not re.search(r"\w ,", entry), f"space before a comma: {entry[:80]}"
+        assert not re.search(r"\w \.", entry), f"space before a full stop: {entry[:80]}"
+        assert "<strong> " not in entry, "space inside a bold tag"
+        assert " </strong>" not in entry, "space inside a bold tag"
