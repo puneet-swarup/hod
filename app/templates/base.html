@@ -76,6 +76,30 @@
         .nav-more-menu a:hover {
             background: #fef3c7;
         }
+        /* A quiet heading above each group. Not a link, not clickable —
+           it labels the question the links below answer. */
+        .nav-more-menu .nav-group {
+            margin: 0.5rem 0 0.15rem;
+            padding: 0 0.85rem;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #9a7b4f;
+            white-space: nowrap;
+        }
+        .nav-more-menu .nav-group:first-child {
+            margin-top: 0.15rem;
+        }
+        /* Emoji do not all render the same width, so the labels drifted even
+           with a flex row. A fixed icon column puts every label on one line. */
+        .nav-more-menu .nav-ico {
+            width: 1.35rem;
+            flex: none;
+            text-align: center;
+            font-size: 1rem;
+            line-height: 1;
+        }
         .nav-more-menu a.active {
             background: #fde68a;
             color: #78350f;
@@ -105,7 +129,7 @@
                 </div>
             </a>
 
-            <!-- Nav -->
+            <!-- Nav — grouped by what the owner is doing, not by when it was built -->
             <nav class="flex items-center justify-center gap-0.5 flex-1 py-1">
                 <a href="/today"
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/today' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
@@ -133,15 +157,27 @@
                         ⋯ <span class="hidden sm:inline">More</span>
                     </summary>
                     <div class="nav-more-menu">
-                        <a href="/b2b" class="{% if '/b2b' in request.url.path %}active{% endif %}">🏪 Partners</a>
-                        <a href="/stock" class="{% if '/stock' in request.url.path %}active{% endif %}">🧺 Ready stock</a>
-                        <a href="/ingredients" class="{% if '/ingredients' in request.url.path %}active{% endif %}">📦 Inventory</a>
-                        <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}">📊 Reports</a>
-                        <a href="/dashboard" class="{% if '/dashboard' in request.url.path %}active{% endif %}">📈 Dashboard</a>
-                        <a href="/export" class="{% if '/export' in request.url.path %}active{% endif %}">📥 Export</a>
-                        <a href="/settings" class="{% if '/settings' in request.url.path %}active{% endif %}">⚙️ Settings</a>
+
+                        {# Grouped by the question being asked: who am I selling to,
+                           what am I making, what did the numbers do, and the
+                           plumbing. Ordering within a group is by frequency. #}
+
+                        <p class="nav-group">Selling</p>
+                        <a href="/b2b" class="{% if '/b2b' in request.url.path %}active{% endif %}"><span class="nav-ico">🏪</span>Partners</a>
+
+                        <p class="nav-group">Making</p>
+                        <a href="/stock" class="{% if '/stock' in request.url.path %}active{% endif %}"><span class="nav-ico">🧺</span>Ready stock</a>
+                        <a href="/ingredients" class="{% if '/ingredients' in request.url.path %}active{% endif %}"><span class="nav-ico">📦</span>Ingredients</a>
+
+                        <p class="nav-group">Numbers</p>
+                        <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}"><span class="nav-ico">📊</span>Reports</a>
+                        <a href="/dashboard" class="{% if '/dashboard' in request.url.path %}active{% endif %}"><span class="nav-ico">📈</span>Dashboard</a>
+                        <a href="/export" class="{% if '/export' in request.url.path %}active{% endif %}"><span class="nav-ico">📥</span>Export</a>
+
+                        <p class="nav-group">System</p>
+                        <a href="/settings" class="{% if '/settings' in request.url.path %}active{% endif %}"><span class="nav-ico">⚙️</span>Settings</a>
                         <!--
-                        <a href="/audit" class="{% if '/audit' in request.url.path %}active{% endif %}">📜 Audit</a>
+                        <a href="/audit" class="{% if '/audit' in request.url.path %}active{% endif %}"><span class="nav-ico">📜</span>Audit</a>
                         -->
                     </div>
                 </details>

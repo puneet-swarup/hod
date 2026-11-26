@@ -537,3 +537,31 @@ def test_no_button_class_inside_the_more_menu():
         "Use a plain <a> inside .nav-more-menu — a button class breaks the "
         "alignment column"
     )
+
+
+def test_the_more_menu_is_grouped_by_purpose():
+    """Links are grouped under headings that name the question they answer,
+    rather than in the order the features happened to be built."""
+    import pathlib
+
+    html = pathlib.Path("app/templates/base.html").read_text(encoding="utf-8")
+    for heading in ("Selling", "Making", "Numbers", "System"):
+        assert f'<p class="nav-group">{heading}</p>' in html, f"missing group: {heading}"
+
+    # Each link carries a fixed-width icon column, or the labels drift.
+    assert html.count('class="nav-ico"') >= 7
+
+
+def test_every_nav_target_is_a_real_page(client, db):
+    """A grouped menu is no use if an entry points at nothing."""
+    import pathlib
+    import re
+
+    html = pathlib.Path("app/templates/base.html").read_text(encoding="utf-8")
+    menu = re.search(r'<div class="nav-more-menu">(.*?)</div>', html, re.S).group(1)
+    targets = re.findall(r'href="(/[a-z0-9/-]+)"', menu)
+
+    assert targets, "the menu should link somewhere"
+    for target in targets:
+        resp = client.get(target, follow_redirects=False)
+        assert resp.status_code < 400, f"{target} answered {resp.status_code}"
