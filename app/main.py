@@ -173,6 +173,7 @@ app.state.settings = settings
 from app.routers import (  # noqa: E402
     audit,
     b2b,
+    changelog,
     costing,
     customers,
     dashboard,
@@ -194,6 +195,7 @@ app.include_router(customers.router, prefix="/customers", tags=["customers"])
 app.include_router(b2b.router, prefix="/b2b", tags=["b2b"])
 app.include_router(stock.router, prefix="/stock", tags=["stock"])
 app.include_router(costing.router, prefix="/costing", tags=["costing"])
+app.include_router(changelog.router, prefix="/whats-new", tags=["changelog"])
 app.include_router(products.router, prefix="/products", tags=["products"])
 app.include_router(ingredients.router, prefix="/ingredients", tags=["ingredients"])
 app.include_router(invoices.router, prefix="/invoices", tags=["invoices"])

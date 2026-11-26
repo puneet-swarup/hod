@@ -146,6 +146,8 @@ A change is not finished until every line is true:
 - [ ] Existing rows unchanged, or the change documented and reversible
 - [ ] ADR written if the decision is expensive to reverse
 - [ ] Design doc updated if the module's shape changed
+- [ ] `CHANGELOG.md` updated — a release that nobody can read about later
+      may as well not have happened
 - [ ] User manual or training material updated if a screen changed
 - [ ] Deployed, or explicitly recorded as not deployed
 

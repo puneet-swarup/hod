@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}What's new — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-start flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">What's new</h1>
+            <p class="text-sm text-base-content/60">
+                Every change, newest first — so you can see what arrived and when.
+            </p>
+        </div>
+        {% if latest %}
+        <span class="badge badge-lg badge-success font-semibold">{{ latest }}</span>
+        {% endif %}
+    </div>
+
+    {% if not releases %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <p class="text-sm text-base-content/60">
+                No changelog found. The file <code>CHANGELOG.md</code> sits at the
+                root of the project and this page reads it directly.
+            </p>
+        </div>
+    </div>
+    {% else %}
+
+    <p class="text-xs text-base-content/50">
+        {{ releases|length }} releases, {{ total }} changes.
+    </p>
+
+    {% for release in releases %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4 space-y-3">
+
+            <div class="flex items-baseline justify-between gap-2 flex-wrap">
+                <h2 class="text-lg font-extrabold text-amber-900">
+                    {% if release.version %}{{ release.version }}{% else %}{{ release.label }}{% endif %}
+                </h2>
+                {% if release.date %}
+                <span class="text-xs text-base-content/50">{{ release.date }}</span>
+                {% endif %}
+            </div>
+
+            {% for group in release.groups %}
+            <div class="space-y-1">
+                <p class="text-xs font-semibold uppercase tracking-wide text-base-content/40">
+                    {{ group.label }}
+                </p>
+                <ul class="space-y-1.5">
+                    {% for item in group.items %}
+                    <li class="text-sm flex gap-2">
+                        <span class="text-amber-600 shrink-0">•</span>
+                        <span>
+                            {# The changelog uses two inline marks: **bold** for the
+                               headline of an entry and *italic* for a UI label.
+                               Rendering them here keeps the page readable without
+                               a markdown dependency or a |safe filter. #}
+                            {% set with_bold = item | replace('**', '§') %}
+                            {% for chunk in with_bold.split('§') %}
+                                {% if loop.index is even %}
+                                <strong>{{ chunk }}</strong>
+                                {% else %}
+                                {% set with_em = chunk | replace('*', '‡') %}
+                                {% for piece in with_em.split('‡') %}
+                                    {% if loop.index is even %}<em>{{ piece }}</em>{% else %}{{ piece }}{% endif %}
+                                {% endfor %}
+                                {% endif %}
+                            {% endfor %}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+
+        </div>
+    </div>
+    {% endfor %}
+
+    {% endif %}
+</div>
+{% endblock %}
