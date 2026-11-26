@@ -173,3 +173,77 @@ def test_the_shipped_changelog_has_no_truncated_entries():
                 assert not item.endswith((" a", " the", " was", " which", " and")), (
                     f"suspiciously truncated: {item!r}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Staying current — the file is written by hand, so staleness must be
+# impossible rather than merely discouraged
+# ---------------------------------------------------------------------------
+
+
+def _last_commit_date() -> str | None:
+    """The date of the newest commit, in the changelog's own format."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%cd", "--date=format:%-d %B %Y"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=Path(__file__).resolve().parents[1],
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() or None
+
+
+def test_the_changelog_is_not_stale():
+    """Code must not move on without an entry saying what changed.
+
+    The page reads a hand-written file, so nothing forces it to stay current
+    except this test: if the newest commit is later than the newest release,
+    the changelog has fallen behind and someone has shipped in silence.
+    """
+    from datetime import datetime
+
+    commit_date = _last_commit_date()
+    if commit_date is None:
+        pytest.skip("not a git checkout")
+
+    releases = cl.load()
+    assert releases, "the changelog should have releases"
+
+    newest = datetime.strptime(releases[0].date, "%d %B %Y").date()
+    latest_commit = datetime.strptime(commit_date, "%d %B %Y").date()
+
+    assert newest >= latest_commit, (
+        f"The newest release is dated {releases[0].date}, but code was committed "
+        f"on {commit_date}. Add an entry to CHANGELOG.md for what shipped."
+    )
+
+
+def test_the_changelog_avoids_engineering_language():
+    """It is read by the owner, not by a developer.
+
+    'Added a column' is not a feature anyone can use. The technical record
+    lives in the ADRs and the git history; this file is about capability.
+    """
+    import re
+
+    banned = [
+        "column", "table", "migration", "schema", "refactor", "endpoint",
+        "service layer", "HTTPException", "SQLAlchemy", "codebase",
+        "unit test", "coverage", "framework", "API",
+    ]
+    for release in cl.load():
+        for group in release.groups:
+            assert group.label.lower() not in {"under the hood", "technical"}, (
+                f"v{release.version} has a technical section — write it as capability"
+            )
+            for item in group.items:
+                for word in banned:
+                    # Whole words only: 'printable' is not a database table.
+                    assert not re.search(rf"\b{re.escape(word)}\b", item, re.I), (
+                        f"v{release.version} uses '{word}': {item[:70]}"
+                    )
